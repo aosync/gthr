@@ -12,7 +12,6 @@ struct gthr {
 	ucontext_t 			ucp;
 	short				snum;
 	struct gthr_loop 	*gl;
-	struct pollfd		*curpfd;
 	void				(*fun)(void*, void*);
 	void				*args;
 };
@@ -38,7 +37,6 @@ struct gthr_loop {
 
 int gthr_init(gthr *gt, size_t size) {
 	gt->gl = NULL;
-	gt->curpfd = NULL;
 	gt->args = NULL;
 	getcontext(&gt->ucp);
 	gt->sdata = malloc(size * sizeof(char));
@@ -86,7 +84,6 @@ void gthr_loop_next(gthr_loop *gl) {
 
 		gt->snum = 0;
 		swapcontext(&gl->ucp, &gt->ucp);
-		gt->curpfd = NULL;
 
 		switch(gt->snum) {
 		case -1:
