@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <stdio.h>
+#include <time.h>
 #include <poll.h>
 
 typedef struct pollfd pollfd;
@@ -11,6 +12,7 @@ struct gthr {
 	char 				*sdata;
 	ucontext_t 			ucp;
 	short				snum;
+	struct timespec		time;
 	struct gthr_loop 	*gl;
 	void				(*fun)(void*, void*);
 	void				*args;
@@ -32,7 +34,9 @@ struct gthr_loop {
 	ucontext_t 	ucp;
 	pollfdv		pfds;
 	gthrpv		gts;
+	gthrpv		sleep;
 	gthrpll		eq;
+	int			minto;
 };
 
 int gthr_init(gthr *gt, size_t size) {
@@ -64,8 +68,19 @@ void gthr_wait_pollfd(gthr *gt, pollfd pfd) {
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
+void gthr_delay(gthr *gt, long ms) {
+	clock_gettime(CLOCK_MONOTONIC, &gt->time);
+	gt->time.tv_sec += ms / 1000;
+	gt->time.tv_nsec += (ms * 1000000) % 1000000000;
+	gthrpv_push(&gt->gl->sleep, gt);
+	gt->snum = 1;
+	swapcontext(&gt->ucp, &gt->gl->ucp);
+}
+
 void gthr_loop_init(gthr_loop *gl) {
+	gl->minto = 2000;
 	gthrpv_init(&gl->gts);
+	gthrpv_init(&gl->sleep);
 	pollfdv_init(&gl->pfds);
 	gthrpll_init(&gl->eq);
 }
@@ -108,6 +123,30 @@ void gthr_loop_next(gthr_loop *gl) {
 	}
 }
 
+int gthr_loop_wakeups(gthr_loop *gl) {
+	if (gl->sleep.len == 0) return gl->minto;
+	gthr *tgt;
+	struct timespec now, cur;
+	int msmin = gl->minto;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	for (int i = 0; i < gl->sleep.len; i++) {
+		cur = gl->sleep.arr[i]->time;
+		int ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
+
+		if (ms <= 0) {
+			// swap [i] to end then add to exec queue.
+			tgt = gl->sleep.arr[i];
+			gl->sleep.arr[i] = gl->sleep.arr[gl->sleep.len - 1];
+			gthrpv_pop(&gl->sleep);
+			gthrpll_insert_back(&gl->eq, tgt);
+		} else if (ms < msmin) {
+			msmin = ms;
+		}
+	}
+	if (msmin < 0) msmin = 0;
+	return msmin;
+}
+
 void gthr_loop_poll(gthr_loop *gl, int timeout) {
 	int rc = poll(gl->pfds.arr, gl->pfds.len, timeout);
 	if (rc < 1) return; // check to see how to handle this
@@ -117,13 +156,11 @@ void gthr_loop_poll(gthr_loop *gl, int timeout) {
 	for (int i = 0; i < gl->pfds.len; i++) {
 		if (gl->pfds.arr[i].revents & POLLIN || gl->pfds.arr[i].revents & POLLOUT) {
 			// swap to end and pop. add gt to list
-			tpfd = gl->pfds.arr[i];
 			gl->pfds.arr[i] = gl->pfds.arr[gl->pfds.len - 1];
-			gl->pfds.arr[gl->pfds.len - 1] = tpfd;
 			pollfdv_pop(&gl->pfds);
+
 			tgt = gl->gts.arr[i];
 			gl->gts.arr[i] = gl->gts.arr[gl->gts.len - 1];
-			gl->gts.arr[gl->gts.len - 1] = tgt;
 			gthrpv_pop(&gl->gts);
 			gthrpll_insert_back(&gl->eq, tgt);
 			i--;
@@ -135,8 +172,9 @@ void gthr_loop_poll(gthr_loop *gl, int timeout) {
 
 void gthr_loop_run(gthr_loop *gl) {
 	gthr_loop_next(gl);
-	
-	gthr_loop_poll(gl, gl->eq.head ? 0 : 2000);
+	int timeout = gthr_loop_wakeups(gl);
+	// printf("%d\n", timeout);
+	gthr_loop_poll(gl, gl->eq.head ? 0 : timeout);
 }
 
 void gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args) {

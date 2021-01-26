@@ -1,49 +1,46 @@
 #include "gthr.h"
 
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/timerfd.h>
 
 // experiments.
 
-void wait(gthr* gt, int *am) {
-	struct itimerspec timeout;
-	int fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	timeout.it_value.tv_sec = *am;
-	timeout.it_value.tv_nsec = 0;
-	timeout.it_interval.tv_sec = 0; /* not recurring */
-    timeout.it_interval.tv_nsec = 0;
-	timerfd_settime(fd, 0, &timeout, NULL);
-	pollfd pfd;
-	pfd.fd = fd;
-	pfd.events = POLLIN;
-	gthr_wait_pollfd(gt, pfd);
-	close(fd);
-}
-
 void ha(gthr* gt, char *data) {
 	printf("%s\n", data);
-	int to = 2;
 	while (1) {
-		printf("async delay\n");
-		wait(gt, &to);
+		printf("----\n1s\n");
+		gthr_delay(gt, 1000);
 	}
 }
 
 void ho(gthr* gt, char *data) {
 	printf("%s\n", data);
-	int to = 1;
 	while (1) {
-		printf("next\n");
-		wait(gt, &to);
+		printf("2s\n");
+		gthr_delay(gt, 2000);
 	}
+}
+
+void hi(gthr* gt, char *data) {
+	printf("%s\n", data);
+	int c = 0;
+	while (1) {
+		printf("4s\n");
+		gthr_delay(gt, 4000);
+	}
+}
+
+void gmain(gthr *gt, char *v) {
+	printf("bruh\n");
+	gthr_create(gt->gl, &ha, "i am gthread 1");
+	gthr_create(gt->gl, &ho, "i am gthread 2");
+	gthr_create(gt->gl, &hi, "i am gthread 3");
+	printf("bruh\n");
 }
 
 int main() {
 	gthr_loop gl;
 	gthr_loop_init(&gl);
-	gthr_create(&gl, &ha, "this is my data");
-	gthr_create(&gl, &ho, "mhm");
+	gthr_create(&gl, &gmain, "NULL");
 	while (1) gthr_loop_run(&gl);
 	return 0;
 }
