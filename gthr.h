@@ -1,3 +1,6 @@
+#ifndef GTHR_H
+#define GTHR_H
+
 #include <stdlib.h>
 #include <ucontext.h>
 #include <stdio.h>
@@ -187,3 +190,5 @@ void gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args) {
 	makecontext(&gt->ucp, (void (*)(void)) &gthr_wrap, 1, gt);
 	gthrpll_insert_back(&gl->eq, gt);
 }
+
+#endif
