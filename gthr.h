@@ -15,6 +15,7 @@ struct gthr {
 	char 				*sdata;
 	ucontext_t 			ucp;
 	short				snum;
+	short				wnum;
 	struct timespec		time;
 	struct gthr_loop 	*gl;
 	void				(*fun)(void*, void*);
@@ -45,6 +46,7 @@ struct gthr_loop {
 int gthr_init(gthr *gt, size_t size) {
 	gt->gl = NULL;
 	gt->args = NULL;
+	gt->wnum = 0;
 	getcontext(&gt->ucp);
 	gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
@@ -64,11 +66,12 @@ void gthr_yield(gthr *gt) {
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
-void gthr_wait_pollfd(gthr *gt, pollfd pfd) {
+int gthr_wait_pollfd(gthr *gt, pollfd pfd) {
 	pollfdv_push(&gt->gl->pfds, pfd);
 	gthrpv_push(&gt->gl->gts, gt);
 	gt->snum = 1;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
+	return gt->wnum;
 }
 
 void gthr_delay(gthr *gt, long ms) {
@@ -102,6 +105,7 @@ void gthr_loop_next(gthr_loop *gl) {
 
 		gt->snum = 0;
 		swapcontext(&gl->ucp, &gt->ucp);
+		gt->wnum = 0;
 
 		switch(gt->snum) {
 		case -1:
@@ -127,14 +131,14 @@ void gthr_loop_next(gthr_loop *gl) {
 }
 
 int gthr_loop_wakeups(gthr_loop *gl) {
-	if (gl->sleep.len == 0) return gl->minto;
+	if (gl->sleep.len == 0) return -1;
 	gthr *tgt;
 	struct timespec now, cur;
-	int msmin = gl->minto;
+	int msmin = gl->minto, ms, one = 0;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	for (int i = 0; i < gl->sleep.len; i++) {
 		cur = gl->sleep.arr[i]->time;
-		int ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
+		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
 
 		if (ms <= 0) {
 			// swap [i] to end then add to exec queue.
@@ -144,10 +148,11 @@ int gthr_loop_wakeups(gthr_loop *gl) {
 			gthrpll_insert_back(&gl->eq, tgt);
 			i--;
 		} else if (ms < msmin) {
+			one = 1;
 			msmin = ms;
 		}
 	}
-	if (msmin < 0) msmin = 0;
+	if (!one) msmin = -1;
 	return msmin;
 }
 
@@ -158,19 +163,23 @@ void gthr_loop_poll(gthr_loop *gl, int timeout) {
 	pollfd tpfd;
 	gthrp *tgt;
 	for (int i = 0; i < gl->pfds.len; i++) {
-		if (gl->pfds.arr[i].revents & POLLIN || gl->pfds.arr[i].revents & POLLOUT) {
-			// swap to end and pop. add gt to list
-			gl->pfds.arr[i] = gl->pfds.arr[gl->pfds.len - 1];
-			pollfdv_pop(&gl->pfds);
+		// if pollfd not triggered, continue
+		if (!gl->pfds.arr[i].revents) continue;
 
-			tgt = gl->gts.arr[i];
-			gl->gts.arr[i] = gl->gts.arr[gl->gts.len - 1];
-			gthrpv_pop(&gl->gts);
-			gthrpll_insert_back(&gl->eq, tgt);
-			i--;
-		} else {
-			// handle the other events, notably errors etc.
-		}
+		// if error is present, set wnum flag to indicate error
+		if (gl->pfds.arr[i].revents & POLLERR || gl->pfds.arr[i].revents & POLLNVAL)
+			gl->gts.arr[i]->wnum = 1;
+
+		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
+		gl->pfds.arr[i] = gl->pfds.arr[gl->pfds.len - 1];
+		pollfdv_pop(&gl->pfds);
+
+		// same thing for the corresponding gthread, but put it to run
+		tgt = gl->gts.arr[i];
+		gl->gts.arr[i] = gl->gts.arr[gl->gts.len - 1];
+		gthrpv_pop(&gl->gts);
+		gthrpll_insert_back(&gl->eq, tgt);
+		i--;
 	}
 }
 
