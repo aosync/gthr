@@ -31,8 +31,11 @@ void also_read(gthr* gt, int connfd) {
 
 void handle_conn(gthr* gt, int connfd) {
 	printf("handling client with connfd %d\n", connfd);
-	char *test = "HTTP/1.1 200 OK\r\nDate: now\r\nContent-Type: text/html\r\nConnection: Closed\r\n\r\n<meta charset=\"utf-8\"><title>yes</title>yes, that's right, this site is made in C with my gthr library. you are currently being served by a green thread especially created for YOU!";
+	char *test = "HTTP/1.1 200 OK\r\nDate: now\r\nContent-Type: text/html\r\nConnection: Closed\r\nContent-Length: 290\r\n\r\n<meta charset=\"utf-8\"><title>yes</title>yes, that's right, this site is made in C with my gthr library. you are currently being served by a green thread especially created for YOU!";
 	gthr_write(gt, connfd, test, strlen(test) + 1);
+	char buf[500];
+	gthr_read(gt, connfd, buf, 500);
+	printf("%s\n", buf);
 	// gthr_create(gt->gl, &also_read, connfd);
 	close(connfd);
 }
