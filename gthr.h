@@ -142,6 +142,7 @@ int gthr_loop_wakeups(gthr_loop *gl) {
 			gl->sleep.arr[i] = gl->sleep.arr[gl->sleep.len - 1];
 			gthrpv_pop(&gl->sleep);
 			gthrpll_insert_back(&gl->eq, tgt);
+			i--;
 		} else if (ms < msmin) {
 			msmin = ms;
 		}
@@ -175,8 +176,9 @@ void gthr_loop_poll(gthr_loop *gl, int timeout) {
 
 void gthr_loop_run(gthr_loop *gl) {
 	gthr_loop_next(gl);
+
 	int timeout = gthr_loop_wakeups(gl);
-	// printf("%d\n", timeout);
+
 	gthr_loop_poll(gl, gl->eq.head ? 0 : timeout);
 }
 
