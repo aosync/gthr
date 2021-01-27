@@ -43,7 +43,9 @@ struct gthr_loop {
 	int			minto;
 };
 
-int gthr_init(gthr *gt, size_t size) {
+static int
+gthr_init(gthr *gt, size_t size)
+{
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->wnum = 0;
@@ -56,17 +58,23 @@ int gthr_init(gthr *gt, size_t size) {
 	return 1;
 }
 
-void gthr_free(gthr *gt) {
+static void
+gthr_free(gthr *gt)
+{
 	free(gt->sdata);
 	// free gt args too ? no! it's the gthread's role
 }
 
-void gthr_yield(gthr *gt) {
+static void
+gthr_yield(gthr *gt)
+{
 	gt->snum = -1;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
-int gthr_wait_pollfd(gthr *gt, pollfd pfd) {
+static int
+gthr_wait_pollfd(gthr *gt, pollfd pfd)
+{
 	pollfdv_push(&gt->gl->pfds, pfd);
 	gthrpv_push(&gt->gl->gts, gt);
 	gt->snum = 1;
@@ -74,7 +82,9 @@ int gthr_wait_pollfd(gthr *gt, pollfd pfd) {
 	return gt->wnum;
 }
 
-void gthr_delay(gthr *gt, long ms) {
+static void
+gthr_delay(gthr *gt, long ms)
+{
 	clock_gettime(CLOCK_MONOTONIC, &gt->time);
 	gt->time.tv_sec += ms / 1000;
 	gt->time.tv_nsec += (ms * 1000000) % 1000000000;
@@ -83,7 +93,9 @@ void gthr_delay(gthr *gt, long ms) {
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
-void gthr_loop_init(gthr_loop *gl) {
+static void
+gthr_loop_init(gthr_loop *gl)
+{
 	gl->minto = 2000;
 	gthrpv_init(&gl->gts);
 	gthrpv_init(&gl->sleep);
@@ -91,11 +103,15 @@ void gthr_loop_init(gthr_loop *gl) {
 	gthrpll_init(&gl->eq);
 }
 
-void gthr_wrap(gthr *gt) {
+static void
+gthr_wrap(gthr *gt)
+{
 	gt->fun(gt, gt->args);
 }
 
-void gthr_loop_next(gthr_loop *gl) {
+static void
+gthr_loop_next(gthr_loop *gl)
+{
 	if (gl->eq.head) {
 		gthrpll_ *tmp = gl->eq.head;
 		gl->eq.head = tmp->next;
@@ -130,7 +146,9 @@ void gthr_loop_next(gthr_loop *gl) {
 	}
 }
 
-int gthr_loop_wakeups(gthr_loop *gl) {
+static int
+gthr_loop_wakeups(gthr_loop *gl)
+{
 	if (gl->sleep.len == 0) return -1;
 	gthr *tgt;
 	struct timespec now, cur;
@@ -156,7 +174,9 @@ int gthr_loop_wakeups(gthr_loop *gl) {
 	return msmin;
 }
 
-void gthr_loop_poll(gthr_loop *gl, int timeout) {
+static void
+gthr_loop_poll(gthr_loop *gl, int timeout)
+{
 	int rc = poll(gl->pfds.arr, gl->pfds.len, timeout);
 	if (rc < 1) return; // check to see how to handle this
 
@@ -183,7 +203,9 @@ void gthr_loop_poll(gthr_loop *gl, int timeout) {
 	}
 }
 
-void gthr_loop_run(gthr_loop *gl) {
+static void
+gthr_loop_run(gthr_loop *gl)
+{
 	gthr_loop_next(gl);
 
 	int timeout = gthr_loop_wakeups(gl);
@@ -191,7 +213,9 @@ void gthr_loop_run(gthr_loop *gl) {
 	gthr_loop_poll(gl, gl->eq.head ? 0 : timeout);
 }
 
-void gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args) {
+static void
+gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args)
+{
 	gthr *gt = malloc(sizeof(gthr));
 	gthr_init(gt, 16 * 1024);
 	gt->gl = gl;
