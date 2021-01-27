@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <ucontext.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 #include <poll.h>
@@ -80,6 +81,38 @@ gthr_wait_pollfd(gthr *gt, pollfd pfd)
 	gt->snum = 1;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 	return gt->wnum;
+}
+
+static int
+gthr_wait_readable(gthr *gt, int fd)
+{
+	pollfd pfd;
+	pfd.fd = fd;
+	pfd.events = POLLIN;
+	return gthr_wait_pollfd(gt, pfd);
+}
+
+static int
+gthr_wait_writeable(gthr *gt, int fd)
+{
+	pollfd pfd;
+	pfd.fd = fd;
+	pfd.events = POLLOUT;
+	return gthr_wait_pollfd(gt, pfd);
+}
+
+static ssize_t
+gthr_read(gthr *gt, int fd, char *buf, size_t count)
+{
+	if (gthr_wait_readable(gt, fd)) return -1;
+	return read(fd, buf, count);
+}
+
+static ssize_t
+gthr_write(gthr *gt, int fd, char *buf, size_t count)
+{
+	if (gthr_wait_writeable(gt, fd)) return -1;
+	return write(fd, buf, count);
 }
 
 static void

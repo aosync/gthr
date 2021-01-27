@@ -31,13 +31,8 @@ void also_read(gthr* gt, int connfd) {
 
 void handle_conn(gthr* gt, int connfd) {
 	printf("handling client with connfd %d\n", connfd);
-	pollfd pfd;
-	pfd.fd = connfd;
-	pfd.events = POLLOUT;
 	char *test = "HTTP/1.1 200 OK\r\nDate: now\r\nContent-Type: text/html\r\nConnection: Closed\r\n\r\n<meta charset=\"utf-8\"><title>yes</title>yes, that's right, this site is made in C with my gthr library. you are currently being served by a green thread especially created for YOU!";
-	if (!gthr_wait_pollfd(gt, pfd)) {
-		write(connfd, test, strlen(test) + 1);
-	};
+	gthr_write(gt, connfd, test, strlen(test) + 1);
 	// gthr_create(gt->gl, &also_read, connfd);
 	close(connfd);
 }
@@ -52,14 +47,11 @@ void accept_conn(gthr* gt, void* _) {
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	addr.sin_port = htons(4269);
 	bind(sockfd, &addr, sizeof(addr));
-	pollfd pfd;
-	pfd.fd = sockfd;
-	pfd.events = POLLIN;
 	printf("- Listening\n");
 	while (1) {
 		listen(sockfd, 128);
 		printf("- Accepting new connection... \n");
-		gthr_wait_pollfd(gt, pfd);
+		gthr_wait_readable(gt, sockfd);
 		socklen_t client_len = sizeof(addr);
 		int connfd = accept(sockfd, (struct sockaddr *)&addr, &client_len);
 		printf("- Got connection! fd %d\n", connfd);
