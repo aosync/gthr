@@ -91,8 +91,8 @@ void gm(gthr *gt, char *v) {
 		gthr_create(gt->gl, &gmain, NULL);
 		a++;
 	}*/
-	char *txt = "GET / HTTP/1.1\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)\r\nHost: google.com\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nConnection: Keep-Alive\r\n\r\n";
-	gthr_ssl_socket *s = gthr_ssl_tcpdial(gt, "google.com", 443);
+	char *txt = "GET / HTTP/1.1\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)\r\nHost: www.google.com\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nConnection: Keep-Alive\r\n\r\n";
+	SSL *s = gthr_ssl_tcpdial(gt, "google.com", 443);
 	gthr_ssl_write(gt, s, txt, strlen(txt));
 	char buf[16];
 	while (1) {

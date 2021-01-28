@@ -7,17 +7,7 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include <openssl/x509.h>
-#include <openssl/x509_vfy.h>
 #include <errno.h>
-
-struct gthr_ssl_socket {
-	int			sockfd;
-	SSL_CTX		*ctx;
-	SSL			*ssl;
-};
-
-typedef struct gthr_ssl_socket gthr_ssl_socket;
 
 /*
 	compile with -lssl -lcrypto
@@ -33,10 +23,9 @@ gthr_ssl_init()
 	SSL_library_init();
 }
 
-static gthr_ssl_socket *
+static SSL *
 gthr_ssl_tcpdial(gthr *gt, char *address, struct in_addr *addr)
 {
-	gthr_ssl_socket *res;
 	int sockfd = gthr_tcpdial(gt, address, addr), ret;
 	if (sockfd < 0)
 		return NULL;
@@ -67,12 +56,7 @@ gthr_ssl_tcpdial(gthr *gt, char *address, struct in_addr *addr)
 		}
 	}
 
-	res = malloc(sizeof(gthr_ssl_socket));
-	res->sockfd = sockfd;
-	res->ctx = ctx;
-	res->ssl = ssl;
-
-	return res;
+	return ssl;
 
 clean:
 	SSL_free(ssl);
@@ -82,17 +66,18 @@ clean:
 }
 
 static int
-gthr_ssl_read(gthr *gt, gthr_ssl_socket *sock, void *buf, int count)
+gthr_ssl_read(gthr *gt, SSL *sock, void *buf, int count)
 {
 	int ret;
-	while (-1 == (ret = SSL_read(sock->ssl, buf, count))) {
-		switch(SSL_get_error(sock->ssl, ret)) {
+	while (-1 == (ret = SSL_read(sock, buf, count))) {
+		int sfd = SSL_get_fd(sock);
+		switch(SSL_get_error(sock, ret)) {
 		case SSL_ERROR_WANT_READ:
-			if (gthr_wait_readable(gt, sock->sockfd))
+			if (gthr_wait_readable(gt, sfd))
 				return -1;
 			break;
 		case SSL_ERROR_WANT_WRITE:
-			if (gthr_wait_writeable(gt, sock->sockfd))
+			if (gthr_wait_writeable(gt, sfd))
 				return -1;
 			break;
 		default:
@@ -103,17 +88,18 @@ gthr_ssl_read(gthr *gt, gthr_ssl_socket *sock, void *buf, int count)
 }
 
 static int
-gthr_ssl_write(gthr *gt, gthr_ssl_socket *sock, void *buf, int count)
+gthr_ssl_write(gthr *gt, SSL *sock, void *buf, int count)
 {
 	int ret;
-	while (-1 == (ret = SSL_write(sock->ssl, buf, count))) {
-		switch(SSL_get_error(sock->ssl, ret)) {
+	while (-1 == (ret = SSL_write(sock, buf, count))) {
+		int sfd = SSL_get_fd(sock);
+		switch(SSL_get_error(sock, ret)) {
 		case SSL_ERROR_WANT_READ:
-			if (gthr_wait_readable(gt, sock->sockfd))
+			if (gthr_wait_readable(gt, sfd))
 				return -1;
 			break;
 		case SSL_ERROR_WANT_WRITE:
-			if (gthr_wait_writeable(gt, sock->sockfd))
+			if (gthr_wait_writeable(gt, sfd))
 				return -1;
 			break;
 		default:
@@ -124,12 +110,12 @@ gthr_ssl_write(gthr *gt, gthr_ssl_socket *sock, void *buf, int count)
 }
 
 static void
-gthr_ssl_close(gthr *gt, gthr_ssl_socket *sock)
+gthr_ssl_close(gthr *gt, SSL *sock)
 {
-	SSL_free(sock->ssl);
-	close(sock->sockfd);
-	SSL_CTX_free(sock->ctx);
-	free(sock);
+	SSL_shutdown(sock);
+	close(SSL_get_fd(sock));
+	SSL_CTX_free(SSL_get_SSL_CTX(sock));
+	SSL_free(sock);
 }
 
 #endif
