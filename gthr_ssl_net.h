@@ -1,3 +1,6 @@
+#ifndef GTHR_SSL_NET
+#define GTHR_SSL_NET
+
 #include "gthr.h"
 #include "gthr_net.h"
 
@@ -128,3 +131,5 @@ gthr_ssl_close(gthr *gt, gthr_ssl_socket *sock)
 	SSL_CTX_free(sock->ctx);
 	free(sock);
 }
+
+#endif
