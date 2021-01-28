@@ -63,6 +63,7 @@ static void
 gthr_free(gthr *gt)
 {
 	free(gt->sdata);
+	free(gt);
 	// free gt args too ? no! it's the gthread's role
 }
 
@@ -170,7 +171,6 @@ gthr_loop_next(gthr_loop *gl)
 			// gthread returned. free.
 			free(tmp);
 			gthr_free(gt);
-			free(gt);
 			break;
 		default:
 			// gthread blocks. free tmp only.
