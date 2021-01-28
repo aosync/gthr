@@ -1,5 +1,7 @@
 #include "gthr.h"
 
+#include "gthr_net.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -65,17 +67,31 @@ void accept_conn(gthr* gt, void* _) {
 }
 
 void gmain(gthr *gt, char *v) {
-	gthr_create(gt->gl, &accept_conn, NULL);
+	char *txt = "GET / HTTP/1.1\r\n\r\n";
+	int sockfd = gthr_tcpdial(gt, "discord.com", 80);
+	gthr_write(gt, sockfd, txt, strlen(txt));
+	char buf[16];
 	while (1) {
-		printf("-[ignore] probing test\n");
-		gthr_delay(gt, 1500);
+		memset(buf, 0, 16);
+		int rc = gthr_read(gt, sockfd, buf, 15);
+		buf[15] = '\0';
+		printf("%s", buf);
+		if (rc < 15) break;
 	}
+	printf("closed\n");
+	close(sockfd);
 }
+
+void gm(gthr *gt, char *v) {
+	gthr_create(gt->gl, &gmain, NULL);
+}
+
+#include <stdio.h>
 
 int main() {
 	gthr_loop gl;
 	gthr_loop_init(&gl);
-	gthr_create(&gl, &gmain, NULL);
+	gthr_create(&gl, &gm, NULL);
 	while (1) gthr_loop_run(&gl);
 	return 0;
 }
