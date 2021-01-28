@@ -22,25 +22,30 @@
 */
 static int
 gthr_lookup(gthr *gt, char *address, struct in_addr *addr) {
-	struct addrinfo hints, *res;
-	int rc, one = 0;
+	struct addrinfo hints, *res, *tmp;
+	int rc, one = -1;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags |= AI_CANONNAME;
 
-	if (getaddrinfo(address, NULL, &hints, &res))
+	if (getaddrinfo(address, NULL, &hints, &tmp))
 		return -1;
-	
+
+	res = tmp;
 	while (res) {
 		if (res->ai_family) {
 			*addr = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
-			return 0;
+			one = 0;
+			break;
 		}
 		res = res->ai_next;
 	}
-	return -1;
+
+	freeaddrinfo(tmp);
+
+	return one;
 }
 
 

@@ -1,6 +1,7 @@
 #include "gthr.h"
 
 #include "gthr_net.h"
+#include "gthr_ssl_net.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -86,18 +87,36 @@ void gmain(gthr *gt, char *v) {
 
 void gm(gthr *gt, char *v) {
 	int a = 0;
-	while (a < 10) {
+	/*while (a < 10) {
 		gthr_create(gt->gl, &gmain, NULL);
 		a++;
+	}*/
+	char *txt = "GET / HTTP/1.1\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)\r\nHost: google.com\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nConnection: Keep-Alive\r\n\r\n";
+	gthr_ssl_socket *s = gthr_ssl_tcpdial(gt, "google.com", 443);
+	gthr_ssl_write(gt, s, txt, strlen(txt));
+	char buf[16];
+	while (1) {
+		memset(buf, 0, 16);
+		int rc = gthr_ssl_read(gt, s, buf, 15);
+		buf[15] = '\0';
+		printf("%s", buf);
+		if (rc < 15) break;
 	}
+	printf("closed\n");
+	gthr_ssl_close(gt, s);
 }
 
 #include <stdio.h>
 
 int main() {
+	gthr_ssl_init();
 	gthr_loop gl;
 	gthr_loop_init(&gl);
-	gthr_create(&gl, &gm, NULL);
+	int a = 0;
+	while (a < 5) {
+		gthr_create(&gl, &gm, NULL);
+		a++;
+	}
 	while (1) gthr_loop_run(&gl);
 	return 0;
 }
