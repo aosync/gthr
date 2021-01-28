@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <fcntl.h>
+#include <errno.h>
 
 
 /*
@@ -44,7 +46,7 @@ gthr_lookup(gthr *gt, char *address, struct in_addr *addr) {
 
 static int
 gthr_tcpdial(gthr *gt, char *address, int port) {
-	int sockfd, rc;
+	int sockfd;
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
@@ -53,10 +55,13 @@ gthr_tcpdial(gthr *gt, char *address, int port) {
 			return -1;
 	}
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (gthr_wait_readable(gt, sockfd))
-	 	goto nosocket;
-	if (connect(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0)
-		goto nosocket;
+	fcntl(sockfd, F_SETFL, O_NONBLOCK);
+	if (connect(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) >= 0)
+		return -1;
+	if (errno != EINPROGRESS)
+		return -1;
+	if (gthr_wait_writeable(gt, sockfd))
+	  	goto nosocket;
 	
 	return sockfd;
 nosocket:

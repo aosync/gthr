@@ -68,8 +68,10 @@ void accept_conn(gthr* gt, void* _) {
 
 void gmain(gthr *gt, char *v) {
 	char *txt = "GET / HTTP/1.1\r\n\r\n";
-	int sockfd = gthr_tcpdial(gt, "discord.com", 80);
-	gthr_write(gt, sockfd, txt, strlen(txt));
+	int sockfd = gthr_tcpdial(gt, "127.0.0.1", 631);
+	printf("sockfd is %d\n", sockfd);
+	int i = gthr_write(gt, sockfd, txt, strlen(txt));
+	gthr_yield(gt);
 	char buf[16];
 	while (1) {
 		memset(buf, 0, 16);
@@ -83,7 +85,11 @@ void gmain(gthr *gt, char *v) {
 }
 
 void gm(gthr *gt, char *v) {
-	gthr_create(gt->gl, &gmain, NULL);
+	int a = 0;
+	while (a < 10) {
+		gthr_create(gt->gl, &gmain, NULL);
+		a++;
+	}
 }
 
 #include <stdio.h>
