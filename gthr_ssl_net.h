@@ -10,7 +10,7 @@
 #include <errno.h>
 
 /*
-	compile with -lssl -lcrypto
+	link with -lssl -lcrypto
 */
 
 static void

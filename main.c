@@ -1,7 +1,8 @@
 #include "gthr.h"
 
-#include "gthr_net.h"
-#include "gthr_ssl_net.h"
+#include "gthr_curl.h"
+//#include "gthr_net.h"
+//#include "gthr_ssl_net.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -12,7 +13,7 @@
 #include <string.h>
 
 // experiments.
-
+/*
 void also_read(gthr* gt, int connfd) {
 	pollfd pfd;
 	pfd.fd = connfd;
@@ -83,37 +84,37 @@ void gmain(gthr *gt, char *v) {
 	}
 	printf("closed\n");
 	close(sockfd);
+}*/
+
+int i = 0;
+
+void test(gthr *gt, char *v) {
+	while (1) {
+		// printf("[test] ignore\n");
+		gthr_delay(gt, 10);
+	}
 }
 
 void gm(gthr *gt, char *v) {
-	int a = 0;
-	/*while (a < 10) {
-		gthr_create(gt->gl, &gmain, NULL);
-		a++;
-	}*/
-	char *txt = "GET / HTTP/1.1\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)\r\nHost: www.google.com\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nConnection: Keep-Alive\r\n\r\n";
-	SSL *s = gthr_ssl_tcpdial(gt, "google.com", 443);
-	gthr_ssl_write(gt, s, txt, strlen(txt));
-	char buf[16];
-	while (1) {
-		memset(buf, 0, 16);
-		int rc = gthr_ssl_read(gt, s, buf, 15);
-		buf[15] = '\0';
-		printf("%s", buf);
-		if (rc < 15) break;
-	}
-	printf("closed\n");
-	gthr_ssl_close(gt, s);
+	CURL *h = curl_easy_init();
+	curl_easy_setopt(h, CURLOPT_URL, "https://aosync.me");
+	curl_easy_setopt(h, CURLOPT_HEADERDATA, stdout);
+	curl_easy_setopt(h, CURLOPT_NOBODY, 1);
+	gthr_curl_perform(gt, h);
+	//curl_easy_perform(h);
+	curl_easy_cleanup(h);
+	i++;
+	printf("%d finished\n", i);
 }
 
 #include <stdio.h>
 
 int main() {
-	gthr_ssl_init();
 	gthr_loop gl;
 	gthr_loop_init(&gl);
 	int a = 0;
-	while (a < 5) {
+	// gthr_create(&gl, &test, NULL);
+	while (a < 2) {
 		gthr_create(&gl, &gm, NULL);
 		a++;
 	}
