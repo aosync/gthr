@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <poll.h>
+#include <sys/socket.h>
 
 typedef struct pollfd pollfd;
 typedef struct gthr_loop gthr_loop;
@@ -103,17 +104,31 @@ gthr_wait_writeable(gthr *gt, int fd)
 }
 
 static ssize_t
-gthr_read(gthr *gt, int fd, char *buf, size_t count)
+gthr_read(gthr *gt, int fd, void *buf, size_t count)
 {
 	if (gthr_wait_readable(gt, fd)) return -1;
 	return read(fd, buf, count);
 }
 
 static ssize_t
-gthr_write(gthr *gt, int fd, char *buf, size_t count)
+gthr_recv(gthr *gt, int sockfd, void *buf, size_t length, int flags)
+{
+	if (gthr_wait_readable(gt, sockfd)) return -1;
+	return recv(sockfd, buf, length, flags);
+}
+
+static ssize_t
+gthr_write(gthr *gt, int fd, void *buf, size_t count)
 {
 	if (gthr_wait_writeable(gt, fd)) return -1;
 	return write(fd, buf, count);
+}
+
+static ssize_t
+gthr_send(gthr *gt, int sockfd, void *buf, size_t length, int flags)
+{
+	if (gthr_wait_writeable(gt, sockfd)) return -1;
+	return send(sockfd, buf, length, flags);
 }
 
 static void
