@@ -1,6 +1,6 @@
 #include "gthr.h"
 
-#include "gthr_curl.h"
+#include "ext/gthr_curl.h"
 //#include "gthr_net.h"
 //#include "gthr_ssl_net.h"
 
@@ -97,7 +97,7 @@ void test(gthr *gt, char *v) {
 
 void gm(gthr *gt, char *v) {
 	CURL *h = curl_easy_init();
-	curl_easy_setopt(h, CURLOPT_URL, "https://aosync.me");
+	curl_easy_setopt(h, CURLOPT_URL, "https://discord.me");
 	curl_easy_setopt(h, CURLOPT_HEADERDATA, stdout);
 	curl_easy_setopt(h, CURLOPT_NOBODY, 1);
 	gthr_curl_perform(gt, h);

@@ -1,7 +1,7 @@
 #ifndef GTHR_CURL_H
 #define GTHR_CURL_H
 
-#include "gthr.h"
+#include "../gthr.h"
 
 #include <curl/curl.h>
 #include <curl/multi.h>
