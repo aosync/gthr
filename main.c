@@ -1,5 +1,7 @@
 #include "gthr.h"
 
+
+#include "ext/gthr_curl.h"
 //#include "gthr_net.h"
 //#include "gthr_ssl_net.h"
 
@@ -87,16 +89,25 @@ void gmain(gthr *gt, char *v) {
 
 int i = 0;
 
-void test(gthr *gt, char *v) {
-	while (1) {
-		printf("[test] ignore\n");
-		gthr_delay(gt, 800);
-	}
-}
-
-void gm(gthr *gt, char *v) {
+void gm(char *v) {
+	CURL *h = curl_easy_init();
+	curl_easy_setopt(h, CURLOPT_URL, "https://aosync.me");
+	curl_easy_setopt(h, CURLOPT_HEADERDATA, stdout);
+	curl_easy_setopt(h, CURLOPT_NOBODY, 1);
+	gthr_curl_perform(h);
+	//curl_easy_perform(h);
+	curl_easy_cleanup(h);
 	i++;
 	printf("%d finished\n", i);
+}
+
+void test(char *v) {
+	while (1) {
+		gthr_create(&gm, NULL);
+		printf("[test] ignore\n");
+		printf("%x\n", _gthr);
+		gthr_delay(800);
+	}
 }
 
 #include <stdio.h>
@@ -105,7 +116,8 @@ int main() {
 	gthr_loop gl;
 	gthr_loop_init(&gl);
 	int a = 0;
-	gthr_create(&gl, &test, NULL);
+	gthr_create_on(&gl, &test, NULL);
+	gthr_create_on(&gl, &test, NULL);
 	while (a < 2) {
 		//gthr_create(&gl, &gm, NULL);
 		a++;

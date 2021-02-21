@@ -1,7 +1,16 @@
 #include "gthr.h"
 
+_Thread_local gthr_loop	*_gthr_loop	= NULL;
+_Thread_local gthr		*_gthr		= NULL;
+
 void
-gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args)
+gthr_create(void (*fun)(void*), void *args)
+{
+	gthr_create_on(_gthr_loop, fun, args);
+}
+
+void
+gthr_create_on(gthr_loop *gl, void (*fun)(void*), void *args)
 {
 	gthr *gt = malloc(sizeof(gthr));
 	gthr_init(gt, 16 * 1024);
@@ -38,81 +47,81 @@ gthr_destroy(gthr *gt)
 void
 gthr_loop_wrap(gthr *gt)
 {
-	gt->fun(gt, gt->args);
+	gt->fun(gt->args);
 }
 
 void
-gthr_yield(gthr *gt)
+gthr_yield()
 {
-	gt->ystat = GTHR_YIELD;
-	swapcontext(&gt->ucp, &gt->gl->ucp);
+	_gthr->ystat = GTHR_YIELD;
+	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 }
 
 int
-gthr_wait_pollfd(gthr *gt, pollfd pfd)
+gthr_wait_pollfd(pollfd pfd)
 {
-	pollfdv_push(&gt->gl->pfds, pfd);
-	gthrpv_push(&gt->gl->gts, gt);
-	gt->ystat = GTHR_LAISSEZ;
-	swapcontext(&gt->ucp, &gt->gl->ucp);
-	return gt->werr;
+	pollfdv_push(&_gthr_loop->pfds, pfd);
+	gthrpv_push(&_gthr_loop->gts, _gthr);
+	_gthr->ystat = GTHR_LAISSEZ;
+	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	return _gthr->werr;
 }
 
 int
-gthr_wait_readable(gthr *gt, int fd)
+gthr_wait_readable(int fd)
 {
 	pollfd pfd;
 	pfd.fd = fd;
 	pfd.events = POLLIN;
-	return gthr_wait_pollfd(gt, pfd);
+	return gthr_wait_pollfd(pfd);
 }
 
 int
-gthr_wait_writeable(gthr *gt, int fd)
+gthr_wait_writeable(int fd)
 {
 	pollfd pfd;
 	pfd.fd = fd;
 	pfd.events = POLLOUT;
-	return gthr_wait_pollfd(gt, pfd);
+	return gthr_wait_pollfd(pfd);
 }
 
 ssize_t
-gthr_read(gthr *gt, int fd, void *buf, size_t count)
+gthr_read(int fd, void *buf, size_t count)
 {
-	if (gthr_wait_readable(gt, fd)) return -1;
+	if (gthr_wait_readable(fd)) return -1;
 	return read(fd, buf, count);
 }
 
 ssize_t
-gthr_recv(gthr *gt, int sockfd, void *buf, size_t length, int flags)
+gthr_recv(int sockfd, void *buf, size_t length, int flags)
 {
-	if (gthr_wait_readable(gt, sockfd)) return -1;
+	if (gthr_wait_readable(sockfd)) return -1;
 	return recv(sockfd, buf, length, flags);
 }
 
 ssize_t
-gthr_write(gthr *gt, int fd, void *buf, size_t count)
+gthr_write(int fd, void *buf, size_t count)
 {
-	if (gthr_wait_writeable(gt, fd)) return -1;
+	if (gthr_wait_writeable(fd)) return -1;
 	return write(fd, buf, count);
 }
 
 ssize_t
-gthr_send(gthr *gt, int sockfd, void *buf, size_t length, int flags)
+gthr_send(int sockfd, void *buf, size_t length, int flags)
 {
-	if (gthr_wait_writeable(gt, sockfd)) return -1;
+	if (gthr_wait_writeable(sockfd)) return -1;
 	return send(sockfd, buf, length, flags);
 }
 
 void
-gthr_delay(gthr *gt, long ms)
+gthr_delay(long ms)
 {
-	clock_gettime(CLOCK_MONOTONIC, &gt->time);
-	gt->time.tv_sec += ms / 1000;
-	gt->time.tv_nsec += (ms * 1000000) % 1000000000;
-	gthrpv_push(&gt->gl->sleep, gt);
-	gt->ystat = GTHR_LAISSEZ;
-	swapcontext(&gt->ucp, &gt->gl->ucp);
+	clock_gettime(CLOCK_MONOTONIC, &_gthr->time);
+	_gthr->time.tv_sec += ms / 1000;
+	_gthr->time.tv_nsec += (ms * 1000000) % 1000000000;
+	gthrpv_push(&_gthr_loop->sleep, _gthr);
+	_gthr->ystat = GTHR_LAISSEZ;
+	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 }
 
 void
@@ -126,27 +135,29 @@ gthr_loop_init(gthr_loop *gl)
 }
 
 void
-gthr_loop_do(gthr_loop *gl)
+gthr_loop_do()
 {
-	if (gl->eq.head) {
-		gthrpll_ *tmp = gl->eq.head;
-		gl->eq.head = tmp->next;
-		if (!tmp->next) gl->eq.back = tmp->next;
+	if (_gthr_loop->eq.head) {
+		gthrpll_ *tmp = _gthr_loop->eq.head;
+		_gthr_loop->eq.head = tmp->next;
+		if (!tmp->next) _gthr_loop->eq.back = tmp->next;
 
 		gthr *gt = tmp->val;
 
 		gt->ystat = GTHR_RETURN;
-		swapcontext(&gl->ucp, &gt->ucp);
+		_gthr = gt;
+		swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
+		_gthr = NULL;
 		gt->werr = 0;
 
 		switch(gt->ystat) {
 		case GTHR_YIELD:
 			// gthread yielded. append to back of list
-			if (gl->eq.back) {
-				gl->eq.back->next = tmp;
-				gl->eq.back = tmp;
+			if (_gthr_loop->eq.back) {
+				_gthr_loop->eq.back->next = tmp;
+				_gthr_loop->eq.back = tmp;
 			} else {
-				gl->eq.head = gl->eq.back = tmp;
+				_gthr_loop->eq.head = _gthr_loop->eq.back = tmp;
 			}
 			break;
 		case GTHR_RETURN:
@@ -162,23 +173,23 @@ gthr_loop_do(gthr_loop *gl)
 }
 
 int
-gthr_loop_wakeup(gthr_loop *gl)
+gthr_loop_wakeup()
 {
-	if (gl->sleep.len == 0) return -1;
+	if (_gthr_loop->sleep.len == 0) return -1;
 	gthr *tgt;
 	struct timespec now, cur;
-	int msmin = gl->minto, ms, one = 0;
+	int msmin = _gthr_loop->minto, ms, one = 0;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	for (int i = 0; i < gl->sleep.len; i++) {
-		cur = gl->sleep.arr[i]->time;
+	for (int i = 0; i < _gthr_loop->sleep.len; i++) {
+		cur = _gthr_loop->sleep.arr[i]->time;
 		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
 
 		if (ms <= 0) {
 			// swap [i] to end then add to exec queue.
-			tgt = gl->sleep.arr[i];
-			gl->sleep.arr[i] = gl->sleep.arr[gl->sleep.len - 1];
-			gthrpv_pop(&gl->sleep);
-			gthrpll_insert_back(&gl->eq, tgt);
+			tgt = _gthr_loop->sleep.arr[i];
+			_gthr_loop->sleep.arr[i] = _gthr_loop->sleep.arr[_gthr_loop->sleep.len - 1];
+			gthrpv_pop(&_gthr_loop->sleep);
+			gthrpll_insert_back(&_gthr_loop->eq, tgt);
 			i--;
 		} else if (ms < msmin) {
 			one = 1;
@@ -190,30 +201,30 @@ gthr_loop_wakeup(gthr_loop *gl)
 }
 
 void
-gthr_loop_poll(gthr_loop *gl, int timeout)
+gthr_loop_poll(int timeout)
 {
-	int rc = poll(gl->pfds.arr, gl->pfds.len, timeout);
+	int rc = poll(_gthr_loop->pfds.arr, _gthr_loop->pfds.len, timeout);
 	if (rc < 1) return; // check to see how to handle this
 
 	pollfd tpfd;
 	gthrp *tgt;
-	for (int i = 0; i < gl->pfds.len; i++) {
+	for (int i = 0; i < _gthr_loop->pfds.len; i++) {
 		// if pollfd not triggered, continue
-		if (!gl->pfds.arr[i].revents) continue;
+		if (!_gthr_loop->pfds.arr[i].revents) continue;
 
 		// if error is present, set werr flag to indicate error
-		if (gl->pfds.arr[i].revents & POLLERR || gl->pfds.arr[i].revents & POLLNVAL)
-			gl->gts.arr[i]->werr = 1;
+		if (_gthr_loop->pfds.arr[i].revents & POLLERR || _gthr_loop->pfds.arr[i].revents & POLLNVAL)
+			_gthr_loop->gts.arr[i]->werr = 1;
 
 		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
-		gl->pfds.arr[i] = gl->pfds.arr[gl->pfds.len - 1];
-		pollfdv_pop(&gl->pfds);
+		_gthr_loop->pfds.arr[i] = _gthr_loop->pfds.arr[_gthr_loop->pfds.len - 1];
+		pollfdv_pop(&_gthr_loop->pfds);
 
 		// same thing for the corresponding gthread, but put it to run
-		tgt = gl->gts.arr[i];
-		gl->gts.arr[i] = gl->gts.arr[gl->gts.len - 1];
-		gthrpv_pop(&gl->gts);
-		gthrpll_insert_back(&gl->eq, tgt);
+		tgt = _gthr_loop->gts.arr[i];
+		_gthr_loop->gts.arr[i] = _gthr_loop->gts.arr[_gthr_loop->gts.len - 1];
+		gthrpv_pop(&_gthr_loop->gts);
+		gthrpll_insert_back(&_gthr_loop->eq, tgt);
 		i--;
 	}
 }
@@ -221,9 +232,11 @@ gthr_loop_poll(gthr_loop *gl, int timeout)
 void
 gthr_loop_run(gthr_loop *gl)
 {
-	gthr_loop_do(gl);
+	_gthr_loop = gl;
 
-	int timeout = gthr_loop_wakeup(gl);
+	gthr_loop_do();
+	int timeout = gthr_loop_wakeup();
+	gthr_loop_poll(_gthr_loop->eq.head ? 0 : timeout);
 
-	gthr_loop_poll(gl, gl->eq.head ? 0 : timeout);
+	_gthr_loop = NULL;
 }

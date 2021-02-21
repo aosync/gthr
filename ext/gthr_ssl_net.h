@@ -24,9 +24,9 @@ gthr_ssl_init()
 }
 
 static SSL *
-gthr_ssl_tcpdial(gthr *gt, char *address, struct in_addr *addr)
+gthr_ssl_tcpdial(char *address, struct in_addr *addr)
 {
-	int sockfd = gthr_tcpdial(gt, address, addr), ret;
+	int sockfd = gthr_tcpdial(address, addr), ret;
 	if (sockfd < 0)
 		return NULL;
 	SSL_METHOD *method;
@@ -44,11 +44,11 @@ gthr_ssl_tcpdial(gthr *gt, char *address, struct in_addr *addr)
 	while (-1 == (ret = SSL_connect(ssl))) {
 		switch(SSL_get_error(ssl, ret)) {
 		case SSL_ERROR_WANT_READ:
-			if (gthr_wait_readable(gt, sockfd))
+			if (gthr_wait_readable(sockfd))
 				goto clean;
 			break;
 		case SSL_ERROR_WANT_WRITE:
-			if (gthr_wait_writeable(gt, sockfd))
+			if (gthr_wait_writeable(sockfd))
 				goto clean;
 			break;
 		default:
@@ -66,18 +66,18 @@ clean:
 }
 
 static int
-gthr_ssl_read(gthr *gt, SSL *sock, void *buf, int count)
+gthr_ssl_read(SSL *sock, void *buf, int count)
 {
 	int ret;
 	while (-1 == (ret = SSL_read(sock, buf, count))) {
 		int sfd = SSL_get_fd(sock);
 		switch(SSL_get_error(sock, ret)) {
 		case SSL_ERROR_WANT_READ:
-			if (gthr_wait_readable(gt, sfd))
+			if (gthr_wait_readable(sfd))
 				return -1;
 			break;
 		case SSL_ERROR_WANT_WRITE:
-			if (gthr_wait_writeable(gt, sfd))
+			if (gthr_wait_writeable(sfd))
 				return -1;
 			break;
 		default:
@@ -88,18 +88,18 @@ gthr_ssl_read(gthr *gt, SSL *sock, void *buf, int count)
 }
 
 static int
-gthr_ssl_write(gthr *gt, SSL *sock, void *buf, int count)
+gthr_ssl_write(SSL *sock, void *buf, int count)
 {
 	int ret;
 	while (-1 == (ret = SSL_write(sock, buf, count))) {
 		int sfd = SSL_get_fd(sock);
 		switch(SSL_get_error(sock, ret)) {
 		case SSL_ERROR_WANT_READ:
-			if (gthr_wait_readable(gt, sfd))
+			if (gthr_wait_readable(sfd))
 				return -1;
 			break;
 		case SSL_ERROR_WANT_WRITE:
-			if (gthr_wait_writeable(gt, sfd))
+			if (gthr_wait_writeable(sfd))
 				return -1;
 			break;
 		default:
@@ -110,7 +110,7 @@ gthr_ssl_write(gthr *gt, SSL *sock, void *buf, int count)
 }
 
 static void
-gthr_ssl_close(gthr *gt, SSL *sock)
+gthr_ssl_close(SSL *sock)
 {
 	SSL_shutdown(sock);
 	close(SSL_get_fd(sock));

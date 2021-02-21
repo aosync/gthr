@@ -9,7 +9,7 @@
 #include <poll.h>
 
 static void
-gthr_curl_perform(gthr *gt, CURL *handle) {
+gthr_curl_perform(CURL *handle) {
 	CURLM *multi_handle;
 	CURLMsg *msg;
 	int running = 0;
@@ -32,12 +32,12 @@ gthr_curl_perform(gthr *gt, CURL *handle) {
 		if (mc != CURLM_OK)
 			break;
 		if (maxfd == -1) {
-			gthr_delay(gt, 100);
+			gthr_delay(100);
 		} else {
 			if (FD_ISSET(maxfd, &fdread)) {
-				if (gthr_wait_readable(gt, maxfd)) break;
+				if (gthr_wait_readable(maxfd)) break;
 			} else if (FD_ISSET(maxfd, &fdwrite)) {
-				if (gthr_wait_writeable(gt, maxfd)) break;
+				if (gthr_wait_writeable(maxfd)) break;
 			}
 		}
 		curl_multi_perform(multi_handle, &running);

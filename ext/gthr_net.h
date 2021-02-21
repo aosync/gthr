@@ -21,7 +21,7 @@
 	getaddrinfo_a exists but it's a GNU extension.
 */
 static int
-gthr_lookup(gthr *gt, char *address, struct in_addr *addr) {
+gthr_lookup(char *address, struct in_addr *addr) {
 	struct addrinfo hints, *res, *tmp;
 	int rc, one = -1;
 
@@ -50,13 +50,13 @@ gthr_lookup(gthr *gt, char *address, struct in_addr *addr) {
 
 
 static int
-gthr_tcpdial(gthr *gt, char *address, int port) {
+gthr_tcpdial(char *address, int port) {
 	int sockfd;
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	if (inet_pton(AF_INET, address, &addr.sin_addr) <= 0) {
-		if (gthr_lookup(gt, address, &addr.sin_addr))
+		if (gthr_lookup(address, &addr.sin_addr))
 			return -1;
 	}
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -65,7 +65,7 @@ gthr_tcpdial(gthr *gt, char *address, int port) {
 		return -1;
 	if (errno != EINPROGRESS)
 		return -1;
-	if (gthr_wait_writeable(gt, sockfd))
+	if (gthr_wait_writeable(sockfd))
 	  	goto nosocket;
 	
 	return sockfd;
