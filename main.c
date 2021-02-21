@@ -89,8 +89,8 @@ int i = 0;
 
 void test(gthr *gt, char *v) {
 	while (1) {
-		// printf("[test] ignore\n");
-		gthr_delay(gt, 10);
+		printf("[test] ignore\n");
+		gthr_delay(gt, 800);
 	}
 }
 
@@ -105,9 +105,9 @@ int main() {
 	gthr_loop gl;
 	gthr_loop_init(&gl);
 	int a = 0;
-	// gthr_create(&gl, &test, NULL);
+	gthr_create(&gl, &test, NULL);
 	while (a < 2) {
-		gthr_create(&gl, &gm, NULL);
+		//gthr_create(&gl, &gm, NULL);
 		a++;
 	}
 	while (1) gthr_loop_run(&gl);

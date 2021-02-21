@@ -1,5 +1,18 @@
 #include "gthr.h"
 
+void
+gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args)
+{
+	gthr *gt = malloc(sizeof(gthr));
+	gthr_init(gt, 16 * 1024);
+	gt->gl = gl;
+	gt->ucp.uc_link = &gl->ucp;
+	gt->fun = fun;
+	gt->args = args;
+	makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
+	gthrpll_insert_back(&gl->eq, gt);
+}
+
 int
 gthr_init(gthr *gt, size_t size)
 {
@@ -16,17 +29,16 @@ gthr_init(gthr *gt, size_t size)
 }
 
 void
-gthr_free(gthr *gt)
+gthr_destroy(gthr *gt)
 {
 	free(gt->sdata);
 	free(gt);
-	// free gt args too ? no! it's the gthread's role
 }
 
 void
 gthr_yield(gthr *gt)
 {
-	gt->snum = -1;
+	gt->snum = GTHR_YIELD;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
@@ -35,7 +47,7 @@ gthr_wait_pollfd(gthr *gt, pollfd pfd)
 {
 	pollfdv_push(&gt->gl->pfds, pfd);
 	gthrpv_push(&gt->gl->gts, gt);
-	gt->snum = 1;
+	gt->snum = GTHR_LAISSEZ;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 	return gt->wnum;
 }
@@ -93,7 +105,7 @@ gthr_delay(gthr *gt, long ms)
 	gt->time.tv_sec += ms / 1000;
 	gt->time.tv_nsec += (ms * 1000000) % 1000000000;
 	gthrpv_push(&gt->gl->sleep, gt);
-	gt->snum = 1;
+	gt->snum = GTHR_LAISSEZ;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
@@ -108,13 +120,13 @@ gthr_loop_init(gthr_loop *gl)
 }
 
 void
-gthr_wrap(gthr *gt)
+gthr_loop_wrap(gthr *gt)
 {
 	gt->fun(gt, gt->args);
 }
 
 void
-gthr_loop_next(gthr_loop *gl)
+gthr_loop_do(gthr_loop *gl)
 {
 	if (gl->eq.head) {
 		gthrpll_ *tmp = gl->eq.head;
@@ -123,12 +135,12 @@ gthr_loop_next(gthr_loop *gl)
 
 		gthr *gt = tmp->val;
 
-		gt->snum = 0;
+		gt->snum = GTHR_RETURN;
 		swapcontext(&gl->ucp, &gt->ucp);
 		gt->wnum = 0;
 
 		switch(gt->snum) {
-		case -1:
+		case GTHR_YIELD:
 			// gthread yielded. append to back of list
 			if (gl->eq.back) {
 				gl->eq.back->next = tmp;
@@ -137,10 +149,10 @@ gthr_loop_next(gthr_loop *gl)
 				gl->eq.head = gl->eq.back = tmp;
 			}
 			break;
-		case 0:
+		case GTHR_RETURN:
 			// gthread returned. free.
 			free(tmp);
-			gthr_free(gt);
+			gthr_destroy(gt);
 			break;
 		default:
 			// gthread blocks. free tmp only.
@@ -150,7 +162,7 @@ gthr_loop_next(gthr_loop *gl)
 }
 
 int
-gthr_loop_wakeups(gthr_loop *gl)
+gthr_loop_wakeup(gthr_loop *gl)
 {
 	if (gl->sleep.len == 0) return -1;
 	gthr *tgt;
@@ -209,22 +221,9 @@ gthr_loop_poll(gthr_loop *gl, int timeout)
 void
 gthr_loop_run(gthr_loop *gl)
 {
-	gthr_loop_next(gl);
+	gthr_loop_do(gl);
 
-	int timeout = gthr_loop_wakeups(gl);
+	int timeout = gthr_loop_wakeup(gl);
 
 	gthr_loop_poll(gl, gl->eq.head ? 0 : timeout);
-}
-
-void
-gthr_create(gthr_loop *gl, void (*fun)(void*, void*), void *args)
-{
-	gthr *gt = malloc(sizeof(gthr));
-	gthr_init(gt, 16 * 1024);
-	gt->gl = gl;
-	gt->ucp.uc_link = &gl->ucp;
-	gt->fun = fun;
-	gt->args = args;
-	makecontext(&gt->ucp, (void (*)(void)) &gthr_wrap, 1, gt);
-	gthrpll_insert_back(&gl->eq, gt);
 }
