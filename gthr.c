@@ -18,7 +18,7 @@ gthr_init(gthr *gt, size_t size)
 {
 	gt->gl = NULL;
 	gt->args = NULL;
-	gt->wnum = 0;
+	gt->werr = 0;
 	getcontext(&gt->ucp);
 	gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
@@ -36,9 +36,15 @@ gthr_destroy(gthr *gt)
 }
 
 void
+gthr_loop_wrap(gthr *gt)
+{
+	gt->fun(gt, gt->args);
+}
+
+void
 gthr_yield(gthr *gt)
 {
-	gt->snum = GTHR_YIELD;
+	gt->ystat = GTHR_YIELD;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
@@ -47,9 +53,9 @@ gthr_wait_pollfd(gthr *gt, pollfd pfd)
 {
 	pollfdv_push(&gt->gl->pfds, pfd);
 	gthrpv_push(&gt->gl->gts, gt);
-	gt->snum = GTHR_LAISSEZ;
+	gt->ystat = GTHR_LAISSEZ;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
-	return gt->wnum;
+	return gt->werr;
 }
 
 int
@@ -105,7 +111,7 @@ gthr_delay(gthr *gt, long ms)
 	gt->time.tv_sec += ms / 1000;
 	gt->time.tv_nsec += (ms * 1000000) % 1000000000;
 	gthrpv_push(&gt->gl->sleep, gt);
-	gt->snum = GTHR_LAISSEZ;
+	gt->ystat = GTHR_LAISSEZ;
 	swapcontext(&gt->ucp, &gt->gl->ucp);
 }
 
@@ -120,12 +126,6 @@ gthr_loop_init(gthr_loop *gl)
 }
 
 void
-gthr_loop_wrap(gthr *gt)
-{
-	gt->fun(gt, gt->args);
-}
-
-void
 gthr_loop_do(gthr_loop *gl)
 {
 	if (gl->eq.head) {
@@ -135,11 +135,11 @@ gthr_loop_do(gthr_loop *gl)
 
 		gthr *gt = tmp->val;
 
-		gt->snum = GTHR_RETURN;
+		gt->ystat = GTHR_RETURN;
 		swapcontext(&gl->ucp, &gt->ucp);
-		gt->wnum = 0;
+		gt->werr = 0;
 
-		switch(gt->snum) {
+		switch(gt->ystat) {
 		case GTHR_YIELD:
 			// gthread yielded. append to back of list
 			if (gl->eq.back) {
@@ -201,9 +201,9 @@ gthr_loop_poll(gthr_loop *gl, int timeout)
 		// if pollfd not triggered, continue
 		if (!gl->pfds.arr[i].revents) continue;
 
-		// if error is present, set wnum flag to indicate error
+		// if error is present, set werr flag to indicate error
 		if (gl->pfds.arr[i].revents & POLLERR || gl->pfds.arr[i].revents & POLLNVAL)
-			gl->gts.arr[i]->wnum = 1;
+			gl->gts.arr[i]->werr = 1;
 
 		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
 		gl->pfds.arr[i] = gl->pfds.arr[gl->pfds.len - 1];

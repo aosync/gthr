@@ -22,8 +22,8 @@ enum yield_status {
 struct gthr {
 	char 				*sdata;
 	ucontext_t 			ucp;
-	enum yield_status	snum;
-	short				wnum;
+	enum yield_status	ystat;
+	short				werr;
 	struct timespec		time;
 	struct gthr_loop 	*gl;
 	void				(*fun)(void*, void*);
