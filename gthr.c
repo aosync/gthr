@@ -191,7 +191,7 @@ gthr_loop_wakeup()
 			gthrpv_pop(&_gthr_loop->sleep);
 			gthrpll_insert_back(&_gthr_loop->eq, tgt);
 			i--;
-		} else if (ms < msmin) {
+		} else if (ms <= msmin) {
 			one = 1;
 			msmin = ms;
 		}
