@@ -250,7 +250,7 @@ gthr_loop_poll(int timeout)
 
 		// if error is present, set werr flag to indicate error
 		if (_gthr_loop->pfd[i].revents & POLLERR || _gthr_loop->pfd[i].revents & POLLNVAL)
-			_gthr_loop->inpoll[i]->werr = 1;
+			_gthr_loop->inpoll[i]->werr = -1;
 
 		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
 		_gthr_loop->pfd[i] = _gthr_loop->pfd[_gthr_loop->pfdl - 1];
