@@ -1,7 +1,7 @@
 #include "gthr.h"
 
 
-#include "ext/gthr_curl.h"
+// #include "ext/gthr_curl.h"
 //#include "gthr_net.h"
 //#include "gthr_ssl_net.h"
 
@@ -90,13 +90,13 @@ void gmain(gthr *gt, char *v) {
 int i = 0;
 
 void gm(char *v) {
-	CURL *h = curl_easy_init();
+	/*CURL *h = curl_easy_init();
 	curl_easy_setopt(h, CURLOPT_URL, "https://aosync.me");
 	curl_easy_setopt(h, CURLOPT_HEADERDATA, stdout);
 	curl_easy_setopt(h, CURLOPT_NOBODY, 1);
-	gthr_curl_perform(h);
+	gthr_curl_perform(h); */
 	//curl_easy_perform(h);
-	curl_easy_cleanup(h);
+	/* curl_easy_cleanup(h); */
 	i++;
 	printf("%d finished\n", i);
 }
@@ -113,7 +113,7 @@ void test(char *v) {
 #include <stdio.h>
 
 int main() {
-	gthr_loop gl;
+	struct gthr_loop gl;
 	gthr_loop_init(&gl);
 	int a = 0;
 	gthr_create_on(&gl, &test, NULL);

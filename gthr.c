@@ -1,7 +1,27 @@
 #include "gthr.h"
 
-_Thread_local gthr_loop	*_gthr_loop	= NULL;
-_Thread_local gthr		*_gthr		= NULL;
+static void *
+grow(void *arr, size_t len, size_t *cap, size_t elsize)
+{
+	if(len >= *cap){
+		*cap *= 2;
+		arr = realloc(arr, *cap * elsize);
+	}
+	return arr;
+}
+
+static void *
+shrink(void *arr, size_t len, size_t *cap, size_t elsize)
+{
+	if(len < *cap / 2){
+		*cap /= 2;
+		arr = realloc(arr, *cap * elsize);
+	}
+	return arr;
+}
+
+_Thread_local struct gthr_loop	*_gthr_loop	= NULL;
+_Thread_local struct gthr		*_gthr		= NULL;
 
 void
 gthr_create(void (*fun)(void*), void *args)
@@ -10,9 +30,9 @@ gthr_create(void (*fun)(void*), void *args)
 }
 
 void
-gthr_create_on(gthr_loop *gl, void (*fun)(void*), void *args)
+gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args)
 {
-	gthr *gt = malloc(sizeof(gthr));
+	struct gthr *gt = malloc(sizeof(struct gthr));
 	gthr_init(gt, 16 * 1024);
 	gt->gl = gl;
 	gt->ucp.uc_link = &gl->ucp;
@@ -23,7 +43,7 @@ gthr_create_on(gthr_loop *gl, void (*fun)(void*), void *args)
 }
 
 int
-gthr_init(gthr *gt, size_t size)
+gthr_init(struct gthr *gt, size_t size)
 {
 	gt->gl = NULL;
 	gt->args = NULL;
@@ -38,14 +58,14 @@ gthr_init(gthr *gt, size_t size)
 }
 
 void
-gthr_destroy(gthr *gt)
+gthr_destroy(struct gthr *gt)
 {
 	free(gt->sdata);
 	free(gt);
 }
 
 void
-gthr_loop_wrap(gthr *gt)
+gthr_loop_wrap(struct gthr *gt)
 {
 	gt->fun(gt->args);
 }
@@ -58,10 +78,12 @@ gthr_yield()
 }
 
 int
-gthr_wait_pollfd(pollfd pfd)
+gthr_wait_pollfd(struct pollfd pfd)
 {
-	pollfdv_push(&_gthr_loop->pfds, pfd);
-	gthrpv_push(&_gthr_loop->gts, _gthr);
+	_gthr_loop->pfd[_gthr_loop->pfdl++] = pfd;
+	_gthr_loop->pfd = grow(_gthr_loop->pfd, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct pollfd));
+	_gthr_loop->inpoll[_gthr_loop->pfdl - 1] = _gthr;
+	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
 	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 	return _gthr->werr;
@@ -70,7 +92,7 @@ gthr_wait_pollfd(pollfd pfd)
 int
 gthr_wait_readable(int fd)
 {
-	pollfd pfd;
+	struct pollfd pfd;
 	pfd.fd = fd;
 	pfd.events = POLLIN;
 	return gthr_wait_pollfd(pfd);
@@ -79,7 +101,7 @@ gthr_wait_readable(int fd)
 int
 gthr_wait_writeable(int fd)
 {
-	pollfd pfd;
+	struct pollfd pfd;
 	pfd.fd = fd;
 	pfd.events = POLLOUT;
 	return gthr_wait_pollfd(pfd);
@@ -119,18 +141,28 @@ gthr_delay(long ms)
 	clock_gettime(CLOCK_MONOTONIC, &_gthr->time);
 	_gthr->time.tv_sec += ms / 1000;
 	_gthr->time.tv_nsec += (ms * 1000000) % 1000000000;
-	gthrpv_push(&_gthr_loop->sleep, _gthr);
+
+	_gthr_loop->sleep[_gthr_loop->sleepl++] = _gthr;
+	_gthr_loop->sleep = grow(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
+
 	_gthr->ystat = GTHR_LAISSEZ;
 	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 }
 
 void
-gthr_loop_init(gthr_loop *gl)
+gthr_loop_init(struct gthr_loop *gl)
 {
 	gl->minto = 2000;
-	gthrpv_init(&gl->gts);
-	gthrpv_init(&gl->sleep);
-	pollfdv_init(&gl->pfds);
+
+	gl->pfd = malloc(sizeof(struct pollfd));
+	gl->pfdl = 0;
+	gl->pfdc = 1;
+	gl->inpoll = malloc(sizeof(struct gthr *));
+
+	gl->sleep = malloc(sizeof(struct gthr *));
+	gl->sleepl = 0;
+	gl->sleepc = 1;
+
 	gthrpll_init(&gl->eq);
 }
 
@@ -142,7 +174,7 @@ gthr_loop_do()
 		_gthr_loop->eq.head = tmp->next;
 		if (!tmp->next) _gthr_loop->eq.back = tmp->next;
 
-		gthr *gt = tmp->val;
+		struct gthr *gt = tmp->val;
 
 		gt->ystat = GTHR_RETURN;
 		_gthr = gt;
@@ -175,20 +207,24 @@ gthr_loop_do()
 int
 gthr_loop_wakeup()
 {
-	if (_gthr_loop->sleep.len == 0) return -1;
-	gthr *tgt;
+	if (_gthr_loop->sleepl == 0) return -1;
+	struct gthr *tgt;
 	struct timespec now, cur;
 	int msmin = _gthr_loop->minto, ms, one = 0;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	for (int i = 0; i < _gthr_loop->sleep.len; i++) {
-		cur = _gthr_loop->sleep.arr[i]->time;
+	for (int i = 0; i < _gthr_loop->sleepl; i++) {
+		cur = _gthr_loop->sleep[i]->time;
 		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
 
 		if (ms <= 0) {
 			// swap [i] to end then add to exec queue.
-			tgt = _gthr_loop->sleep.arr[i];
-			_gthr_loop->sleep.arr[i] = _gthr_loop->sleep.arr[_gthr_loop->sleep.len - 1];
-			gthrpv_pop(&_gthr_loop->sleep);
+			tgt = _gthr_loop->sleep[i];
+
+			_gthr_loop->sleep[i] = _gthr_loop->sleep[_gthr_loop->sleepl - 1];
+
+			_gthr_loop->sleepl--;
+			_gthr_loop->sleep = shrink(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
+
 			gthrpll_insert_back(&_gthr_loop->eq, tgt);
 			i--;
 		} else if (ms <= msmin) {
@@ -203,34 +239,36 @@ gthr_loop_wakeup()
 void
 gthr_loop_poll(int timeout)
 {
-	int rc = poll(_gthr_loop->pfds.arr, _gthr_loop->pfds.len, timeout);
+	int rc = poll(_gthr_loop->pfd, _gthr_loop->pfdl, timeout);
 	if (rc < 1) return; // check to see how to handle this
 
-	pollfd tpfd;
-	gthrp *tgt;
-	for (int i = 0; i < _gthr_loop->pfds.len; i++) {
+	struct pollfd tpfd;
+	struct gthr **tgt;
+	for (int i = 0; i < _gthr_loop->pfdl; i++) {
 		// if pollfd not triggered, continue
-		if (!_gthr_loop->pfds.arr[i].revents) continue;
+		if (!_gthr_loop->pfd[i].revents) continue;
 
 		// if error is present, set werr flag to indicate error
-		if (_gthr_loop->pfds.arr[i].revents & POLLERR || _gthr_loop->pfds.arr[i].revents & POLLNVAL)
-			_gthr_loop->gts.arr[i]->werr = 1;
+		if (_gthr_loop->pfd[i].revents & POLLERR || _gthr_loop->pfd[i].revents & POLLNVAL)
+			_gthr_loop->inpoll[i]->werr = 1;
 
 		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
-		_gthr_loop->pfds.arr[i] = _gthr_loop->pfds.arr[_gthr_loop->pfds.len - 1];
-		pollfdv_pop(&_gthr_loop->pfds);
+		_gthr_loop->pfd[i] = _gthr_loop->pfd[_gthr_loop->pfdl - 1];
+		_gthr_loop->pfdl--;
+		_gthr_loop->pfd = shrink(_gthr_loop->pfd, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct pollfd));
 
 		// same thing for the corresponding gthread, but put it to run
-		tgt = _gthr_loop->gts.arr[i];
-		_gthr_loop->gts.arr[i] = _gthr_loop->gts.arr[_gthr_loop->gts.len - 1];
-		gthrpv_pop(&_gthr_loop->gts);
+		tgt = _gthr_loop->inpoll[i];
+		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[_gthr_loop->pfdl + 1 - 1]; /* already decremented */
+		_gthr_loop->inpoll = shrink(_gthr_loop->inpoll, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct gthr *));
+
 		gthrpll_insert_back(&_gthr_loop->eq, tgt);
 		i--;
 	}
 }
 
 void
-gthr_loop_run(gthr_loop *gl)
+gthr_loop_run(struct gthr_loop *gl)
 {
 	_gthr_loop = gl;
 
