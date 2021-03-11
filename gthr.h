@@ -24,13 +24,8 @@ struct gthr {
 	struct gthr_loop 	*gl;
 	void				(*fun)(void*);
 	void				*args;
+	struct gthr			*next, *prev;
 };
-
-typedef struct gthr * gthrp;
-
-#define T gthrp
-#define gthrpll_equals(a, b) (0)
-#include "ll.h"
 
 struct gthr_loop {
 	ucontext_t		ucp;
@@ -40,7 +35,7 @@ struct gthr_loop {
 	struct gthr		**sleep;
 	size_t			sleepl, sleepc;
 
-	gthrpll			eq;
+	struct gthr		*head, *tail;
 	int				minto;
 };
 

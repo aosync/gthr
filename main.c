@@ -89,7 +89,7 @@ void gmain(gthr *gt, char *v) {
 
 int i = 0;
 
-void gm(char *v) {
+void gm(void *v) {
 	/*CURL *h = curl_easy_init();
 	curl_easy_setopt(h, CURLOPT_URL, "https://aosync.me");
 	curl_easy_setopt(h, CURLOPT_HEADERDATA, stdout);
@@ -101,11 +101,11 @@ void gm(char *v) {
 	printf("%d finished\n", i);
 }
 
-void test(char *v) {
+void test(void *v) {
 	while (1) {
 		gthr_create(&gm, NULL);
 		printf("[test] ignore\n");
-		printf("%x\n", _gthr);
+		printf("%p\n", _gthr);
 		gthr_delay(800);
 	}
 }

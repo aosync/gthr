@@ -20,6 +20,32 @@ shrink(void *arr, size_t len, size_t *cap, size_t elsize)
 	return arr;
 }
 
+static void
+gthr_loop_list_append(struct gthr_loop *gl, struct gthr *gt)
+{
+	if(!gl->head)
+		gl->head = gl->tail = gt;
+	else{
+		gt->prev = gl->tail;
+		gl->tail->next = gt;
+		gl->tail = gt;
+	}
+}
+
+static struct gthr *
+gthr_loop_list_get(struct gthr_loop *gl)
+{
+	struct gthr *res;
+	if(!gl->head)
+		return NULL;
+	else{
+		res = gl->head;
+		gl->head = res->next;
+		res->next = res->prev = NULL;
+	}
+	return res;
+}
+
 _Thread_local struct gthr_loop	*_gthr_loop	= NULL;
 _Thread_local struct gthr		*_gthr		= NULL;
 
@@ -39,7 +65,7 @@ gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args)
 	gt->fun = fun;
 	gt->args = args;
 	makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
-	gthrpll_insert_back(&gl->eq, gt);
+	gthr_loop_list_append(gl, gt);
 }
 
 int
@@ -54,6 +80,7 @@ gthr_init(struct gthr *gt, size_t size)
 		return 0;
 	gt->ucp.uc_stack.ss_sp = gt->sdata;
 	gt->ucp.uc_stack.ss_size = size * sizeof(char);
+	gt->next = gt->prev = NULL;
 	return 1;
 }
 
@@ -163,44 +190,36 @@ gthr_loop_init(struct gthr_loop *gl)
 	gl->sleepl = 0;
 	gl->sleepc = 1;
 
-	gthrpll_init(&gl->eq);
+	gl->head = gl->tail = NULL;
 }
 
 void
 gthr_loop_do()
 {
-	if (_gthr_loop->eq.head) {
-		gthrpll_ *tmp = _gthr_loop->eq.head;
-		_gthr_loop->eq.head = tmp->next;
-		if (!tmp->next) _gthr_loop->eq.back = tmp->next;
+	struct gthr *gt;
 
-		struct gthr *gt = tmp->val;
+	if((gt = gthr_loop_list_get(_gthr_loop)) == NULL)
+		return;
 
-		gt->ystat = GTHR_RETURN;
-		_gthr = gt;
-		swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
-		_gthr = NULL;
-		gt->werr = 0;
+	gt->ystat = GTHR_RETURN;
+	_gthr = gt;
+	swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
+	_gthr = NULL;
+	gt->werr = 0;
 
-		switch(gt->ystat) {
-		case GTHR_YIELD:
-			// gthread yielded. append to back of list
-			if (_gthr_loop->eq.back) {
-				_gthr_loop->eq.back->next = tmp;
-				_gthr_loop->eq.back = tmp;
-			} else {
-				_gthr_loop->eq.head = _gthr_loop->eq.back = tmp;
-			}
-			break;
-		case GTHR_RETURN:
-			// gthread returned. free.
-			free(tmp);
-			gthr_destroy(gt);
-			break;
-		default:
-			// gthread blocks. free tmp only.
-			free(tmp);
-		}
+	switch(gt->ystat) {
+	case GTHR_YIELD:
+		// gthread yielded. append to back of list
+		gthr_loop_list_append(_gthr_loop, gt);
+		break;
+	case GTHR_RETURN:
+		// gthread returned. free.
+		gthr_destroy(gt);
+		break;
+	default:
+		// gthread blocks
+		/* nothing to do here */
+		break;
 	}
 }
 
@@ -225,7 +244,7 @@ gthr_loop_wakeup()
 			_gthr_loop->sleepl--;
 			_gthr_loop->sleep = shrink(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
 
-			gthrpll_insert_back(&_gthr_loop->eq, tgt);
+			gthr_loop_list_append(_gthr_loop, tgt);
 			i--;
 		} else if (ms <= msmin) {
 			one = 1;
@@ -243,7 +262,7 @@ gthr_loop_poll(int timeout)
 	if (rc < 1) return; // check to see how to handle this
 
 	struct pollfd tpfd;
-	struct gthr **tgt;
+	struct gthr *tgt;
 	for (int i = 0; i < _gthr_loop->pfdl; i++) {
 		// if pollfd not triggered, continue
 		if (!_gthr_loop->pfd[i].revents) continue;
@@ -262,7 +281,7 @@ gthr_loop_poll(int timeout)
 		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[_gthr_loop->pfdl + 1 - 1]; /* already decremented */
 		_gthr_loop->inpoll = shrink(_gthr_loop->inpoll, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct gthr *));
 
-		gthrpll_insert_back(&_gthr_loop->eq, tgt);
+		gthr_loop_list_append(_gthr_loop, tgt);
 		i--;
 	}
 }
@@ -274,7 +293,7 @@ gthr_loop_run(struct gthr_loop *gl)
 
 	gthr_loop_do();
 	int timeout = gthr_loop_wakeup();
-	gthr_loop_poll(_gthr_loop->eq.head ? 0 : timeout);
+	gthr_loop_poll(_gthr_loop->head ? 0 : timeout);
 
 	_gthr_loop = NULL;
 }
