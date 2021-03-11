@@ -26,7 +26,6 @@ gthr_loop_list_append(struct gthr_loop *gl, struct gthr *gt)
 	if(!gl->head)
 		gl->head = gl->tail = gt;
 	else{
-		gt->prev = gl->tail;
 		gl->tail->next = gt;
 		gl->tail = gt;
 	}
@@ -41,7 +40,9 @@ gthr_loop_list_get(struct gthr_loop *gl)
 	else{
 		res = gl->head;
 		gl->head = res->next;
-		res->next = res->prev = NULL;
+		if(!gl->head)
+			gl->tail = NULL;
+		res->next = NULL;
 	}
 	return res;
 }
@@ -80,7 +81,7 @@ gthr_init(struct gthr *gt, size_t size)
 		return 0;
 	gt->ucp.uc_stack.ss_sp = gt->sdata;
 	gt->ucp.uc_stack.ss_size = size * sizeof(char);
-	gt->next = gt->prev = NULL;
+	gt->next = NULL;
 	return 1;
 }
 

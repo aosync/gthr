@@ -24,7 +24,7 @@ struct gthr {
 	struct gthr_loop 	*gl;
 	void				(*fun)(void*);
 	void				*args;
-	struct gthr			*next, *prev;
+	struct gthr			*next;
 };
 
 struct gthr_loop {
