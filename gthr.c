@@ -195,6 +195,26 @@ gthr_loop_init(struct gthr_loop *gl)
 }
 
 void
+gthr_loop_finish(struct gthr_loop *gl)
+{
+	int i;
+	struct gthr *next;
+	for(i = 0; i < gl->pfdl; i++)
+		free(gl->inpoll[i]);
+	free(gl->pfd);
+	free(gl->inpoll);
+
+	for(i = 0; i < gl->sleepl; i++)
+		free(gl->sleep[i]);
+
+	free(gl->sleep);
+	
+	while((next = gthr_loop_list_get(gl)) != NULL){
+		free(next);
+	}
+}
+
+void
 gthr_loop_do()
 {
 	struct gthr *gt;

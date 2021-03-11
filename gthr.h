@@ -63,6 +63,7 @@ ssize_t gthr_send(int sockfd, void *buf, size_t length, int flags);
 void gthr_delay(long ms);
 
 void gthr_loop_init(struct gthr_loop *gl);
+void gthr_loop_finish(struct gthr_loop *gl);
 
 void gthr_loop_do(void);
 int gthr_loop_wakeup(void);
