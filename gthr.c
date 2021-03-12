@@ -202,19 +202,18 @@ gthr_loop_finish(struct gthr_loop *gl)
 	int i;
 	struct gthr *next;
 	for(i = 0; i < gl->inpolll; i++)
-		free(gl->inpoll[i]);
+		gthr_destroy(gl->inpoll[i]);
 
 	free(gl->pfd);
 	free(gl->inpoll);
 
 	for(i = 0; i < gl->sleepl; i++)
-		free(gl->sleep[i]);
+		gthr_destroy(gl->sleep[i]);
 
 	free(gl->sleep);
 	
-	while((next = gthr_loop_list_get(gl)) != NULL){
-		free(next);
-	}
+	while((next = gthr_loop_list_get(gl)) != NULL)
+		gthr_destroy(next);
 }
 
 void
