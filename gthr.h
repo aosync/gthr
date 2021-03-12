@@ -32,6 +32,7 @@ struct gthr_loop {
 	struct pollfd	*pfd;
 	size_t			pfdl, pfdc;
 	struct gthr		**inpoll;
+	size_t			inpolll, inpollc;
 	struct gthr		**sleep;
 	size_t			sleepl, sleepc;
 

@@ -110,8 +110,8 @@ gthr_wait_pollfd(struct pollfd pfd)
 {
 	_gthr_loop->pfd[_gthr_loop->pfdl++] = pfd;
 	_gthr_loop->pfd = grow(_gthr_loop->pfd, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct pollfd));
-	_gthr_loop->inpoll[_gthr_loop->pfdl - 1] = _gthr;
-	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct gthr *));
+	_gthr_loop->inpoll[_gthr_loop->inpolll++] = _gthr;
+	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
 	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 	return _gthr->werr;
@@ -186,6 +186,8 @@ gthr_loop_init(struct gthr_loop *gl)
 	gl->pfdl = 0;
 	gl->pfdc = 1;
 	gl->inpoll = malloc(sizeof(struct gthr *));
+	gl->inpolll = 0;
+	gl->inpollc = 1;
 
 	gl->sleep = malloc(sizeof(struct gthr *));
 	gl->sleepl = 0;
@@ -199,8 +201,9 @@ gthr_loop_finish(struct gthr_loop *gl)
 {
 	int i;
 	struct gthr *next;
-	for(i = 0; i < gl->pfdl; i++)
+	for(i = 0; i < gl->inpolll; i++)
 		free(gl->inpoll[i]);
+
 	free(gl->pfd);
 	free(gl->inpoll);
 
@@ -299,8 +302,9 @@ gthr_loop_poll(int timeout)
 
 		// same thing for the corresponding gthread, but put it to run
 		tgt = _gthr_loop->inpoll[i];
-		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[_gthr_loop->pfdl + 1 - 1]; /* already decremented */
-		_gthr_loop->inpoll = shrink(_gthr_loop->inpoll, _gthr_loop->pfdl, &_gthr_loop->pfdc, sizeof(struct gthr *));
+		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[_gthr_loop->inpolll - 1]; /* already decremented */
+		_gthr_loop->inpolll--;
+		_gthr_loop->inpoll = shrink(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 
 		gthr_loop_list_append(_gthr_loop, tgt);
 		i--;
