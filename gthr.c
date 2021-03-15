@@ -60,21 +60,24 @@ _Thread_local struct gthr		*_gthr		= NULL;
 void
 gthr_create(void (*fun)(void*), void *args)
 {
+	struct gthr *tmp = _gthr;
 	struct gthr *gt = malloc(sizeof(struct gthr));
 	gthr_init(gt, 32 * 1024);
 	char *end = gt->sdata + gt->ssize;
 	gt->gl = _gthr_loop;
 	gt->fun = fun;
 	gt->args = args;
+	_gthr = gt;
 	// makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
 	if(!setjmp(_gthr_loop->link)){
 		asm volatile ("mov %0, %%rsp"
 				:
 				: "r"(end)
 		);
-		gthr_loop_wrap(gt);
+		gthr_wrap();
 	}
 	gthr_loop_list_append(_gthr_loop, gt);
+	_gthr = tmp;
 }
 
 void
@@ -111,11 +114,11 @@ gthr_destroy(struct gthr *gt)
 }
 
 void
-gthr_loop_wrap(struct gthr *gt)
+gthr_wrap()
 {
-	gthr_switch(gt->jmp, _gthr_loop->link);
-	gt->fun(gt->args);
-	gthr_switch(gt->jmp, _gthr_loop->loop);
+	gthr_switch(_gthr->jmp, _gthr_loop->link);
+	_gthr->fun(_gthr->args);
+	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 }
 
 void

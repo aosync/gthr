@@ -49,7 +49,7 @@ void gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args);
 int gthr_init(struct gthr *gt, size_t size);
 void gthr_destroy(struct gthr *gt);
 
-void gthr_loop_wrap(struct gthr *gt);
+void gthr_wrap(void);
 
 void gthr_yield(void);
 
