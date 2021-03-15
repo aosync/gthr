@@ -68,7 +68,6 @@ gthr_create(void (*fun)(void*), void *args)
 	gt->fun = fun;
 	gt->args = args;
 	_gthr = gt;
-	// makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
 	if(!setjmp(_gthr_loop->link)){
 		asm volatile ("mov %0, %%rsp"
 				:
@@ -95,13 +94,10 @@ gthr_init(struct gthr *gt, size_t size)
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->werr = 0;
-	// getcontext(&gt->ucp);
 	gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
 		return 0;
 	gt->ssize = size * sizeof(char);
-	//gt->ucp.uc_stack.ss_sp = gt->sdata;
-	//gt->ucp.uc_stack.ss_size = size * sizeof(char);
 	gt->next = NULL;
 	return 1;
 }
@@ -125,7 +121,6 @@ void
 gthr_yield()
 {
 	_gthr->ystat = GTHR_YIELD;
-	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 }
 
@@ -137,7 +132,6 @@ gthr_wait_pollfd(struct pollfd pfd)
 	_gthr_loop->inpoll[_gthr_loop->inpolll++] = _gthr;
 	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
-	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 	return _gthr->werr;
 }
@@ -199,7 +193,6 @@ gthr_delay(long ms)
 	_gthr_loop->sleep = grow(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
 
 	_gthr->ystat = GTHR_LAISSEZ;
-	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
 	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 }
 
@@ -252,7 +245,6 @@ gthr_loop_do()
 
 	gt->ystat = GTHR_RETURN;
 	_gthr = gt;
-	//swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
 	gthr_switch(_gthr_loop->loop, _gthr->jmp);
 	_gthr = NULL;
 	gt->werr = 0;
