@@ -47,26 +47,43 @@ gthr_loop_list_get(struct gthr_loop *gl)
 	return res;
 }
 
+static void
+gthr_switch(jmp_buf from, jmp_buf to)
+{
+	if(!setjmp(from))
+		longjmp(to, 1);
+}
+
 _Thread_local struct gthr_loop	*_gthr_loop	= NULL;
 _Thread_local struct gthr		*_gthr		= NULL;
 
 void
 gthr_create(void (*fun)(void*), void *args)
 {
-	gthr_create_on(_gthr_loop, fun, args);
+	struct gthr *gt = malloc(sizeof(struct gthr));
+	gthr_init(gt, 32 * 1024);
+	char *end = gt->sdata + gt->ssize;
+	gt->gl = _gthr_loop;
+	gt->fun = fun;
+	gt->args = args;
+	// makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
+	if(!setjmp(_gthr_loop->link)){
+		asm volatile ("mov %0, %%rsp"
+				:
+				: "r"(end)
+		);
+		gthr_loop_wrap(gt);
+	}
+	gthr_loop_list_append(_gthr_loop, gt);
 }
 
 void
 gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args)
 {
-	struct gthr *gt = malloc(sizeof(struct gthr));
-	gthr_init(gt, 16 * 1024);
-	gt->gl = gl;
-	gt->ucp.uc_link = &gl->ucp;
-	gt->fun = fun;
-	gt->args = args;
-	makecontext(&gt->ucp, (void (*)(void)) &gthr_loop_wrap, 1, gt);
-	gthr_loop_list_append(gl, gt);
+	struct gthr_loop *tmp = _gthr_loop;
+	_gthr_loop = gl;
+	gthr_create(fun, args);
+	_gthr_loop = tmp;
 }
 
 int
@@ -75,12 +92,13 @@ gthr_init(struct gthr *gt, size_t size)
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->werr = 0;
-	getcontext(&gt->ucp);
+	// getcontext(&gt->ucp);
 	gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
 		return 0;
-	gt->ucp.uc_stack.ss_sp = gt->sdata;
-	gt->ucp.uc_stack.ss_size = size * sizeof(char);
+	gt->ssize = size * sizeof(char);
+	//gt->ucp.uc_stack.ss_sp = gt->sdata;
+	//gt->ucp.uc_stack.ss_size = size * sizeof(char);
 	gt->next = NULL;
 	return 1;
 }
@@ -95,14 +113,17 @@ gthr_destroy(struct gthr *gt)
 void
 gthr_loop_wrap(struct gthr *gt)
 {
+	gthr_switch(gt->jmp, _gthr_loop->link);
 	gt->fun(gt->args);
+	gthr_switch(gt->jmp, _gthr_loop->loop);
 }
 
 void
 gthr_yield()
 {
 	_gthr->ystat = GTHR_YIELD;
-	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 }
 
 int
@@ -113,7 +134,8 @@ gthr_wait_pollfd(struct pollfd pfd)
 	_gthr_loop->inpoll[_gthr_loop->inpolll++] = _gthr;
 	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
-	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 	return _gthr->werr;
 }
 
@@ -174,7 +196,8 @@ gthr_delay(long ms)
 	_gthr_loop->sleep = grow(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
 
 	_gthr->ystat = GTHR_LAISSEZ;
-	swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	//swapcontext(&_gthr->ucp, &_gthr_loop->ucp);
+	gthr_switch(_gthr->jmp, _gthr_loop->loop);
 }
 
 void
@@ -226,7 +249,8 @@ gthr_loop_do()
 
 	gt->ystat = GTHR_RETURN;
 	_gthr = gt;
-	swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
+	//swapcontext(&_gthr_loop->ucp, &_gthr->ucp);
+	gthr_switch(_gthr_loop->loop, _gthr->jmp);
 	_gthr = NULL;
 	gt->werr = 0;
 

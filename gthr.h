@@ -2,7 +2,7 @@
 #define GTHR_H
 
 #include <stdlib.h>
-#include <ucontext.h>
+#include <setjmp.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
@@ -17,7 +17,8 @@ enum yield_status {
 
 struct gthr {
 	char 				*sdata;
-	ucontext_t 			ucp;
+	size_t				ssize;
+	jmp_buf 			jmp;
 	enum yield_status	ystat;
 	short				werr;
 	struct timespec		time;
@@ -28,7 +29,7 @@ struct gthr {
 };
 
 struct gthr_loop {
-	ucontext_t		ucp;
+	jmp_buf			loop, link;
 	struct pollfd	*pfd;
 	size_t			pfdl, pfdc;
 	struct gthr		**inpoll;
