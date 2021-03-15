@@ -95,7 +95,7 @@ gthr_init(struct gthr *gt, size_t size)
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->werr = 0;
-	gt->sdata = mmap(NULL, size * sizeof(char), PROT_EXEC|PROT_READ|PROT_WRITE, MAP_ANON|MAP_SHARED|MAP_STACK, -1, 0);
+	gt->sdata = mmap(NULL, size * sizeof(char), PROT_EXEC|PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE|MAP_STACK, -1, 0);
 	//gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
 		return 0;
