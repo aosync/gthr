@@ -1,5 +1,15 @@
 #include "gthr.h"
 
+#ifdef __amd64__
+#define STKTO(x) asm volatile ("mov %0, %%rsp" : : "r"(x))
+#endif
+#ifdef __i386__
+#define STKTO(x) asm volatile ("mov %0, %%esp" : : "r"(x))
+#endif
+#ifdef __aarch64__
+#define STKTO(x) asm volatile ("mov sp, %0" : : "r"(x))
+#endif
+
 static void *
 grow(void *arr, size_t len, size_t *cap, size_t elsize)
 {
@@ -69,10 +79,7 @@ gthr_create(void (*fun)(void*), void *args)
 	gt->args = args;
 	_gthr = gt;
 	if(!setjmp(_gthr_loop->link)){
-		asm volatile ("mov %0, %%rsp"
-				:
-				: "r"(end)
-		);
+		STKTO(end);
 		gthr_wrap();
 	}
 	gthr_loop_list_append(_gthr_loop, gt);
