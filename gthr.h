@@ -2,6 +2,8 @@
 #define GTHR_H
 
 #include <stdlib.h>
+/* some libcs implement longjmp_chk to prevent doing weird stuff */
+#undef __USE_FORTIFY_SOURCE
 #include <setjmp.h>
 #include <unistd.h>
 #include <stdio.h>
