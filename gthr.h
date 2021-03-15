@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #include <time.h>
 #include <poll.h>
 #include <sys/socket.h>

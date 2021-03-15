@@ -95,7 +95,8 @@ gthr_init(struct gthr *gt, size_t size)
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->werr = 0;
-	gt->sdata = malloc(size * sizeof(char));
+	gt->sdata = mmap(NULL, size * sizeof(char), PROT_EXEC|PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_STACK, -1, 0);
+	//gt->sdata = malloc(size * sizeof(char));
 	if (!gt->sdata)
 		return 0;
 	gt->ssize = size * sizeof(char);
@@ -106,7 +107,8 @@ gthr_init(struct gthr *gt, size_t size)
 void
 gthr_destroy(struct gthr *gt)
 {
-	free(gt->sdata);
+	munmap(gt->sdata, gt->ssize);
+	//free(gt->sdata);
 	free(gt);
 }
 
