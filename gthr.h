@@ -78,8 +78,6 @@ void gthr_loop_poll(int timeout);
 
 void gthr_loop_run(struct gthr_loop *gl);
 
-#if defined(__amd64__)
 int gthr_setjmp(struct gthr_jmp *);
 void gthr_longjmp(struct gthr_jmp *, int val);
-#endif
 #endif
