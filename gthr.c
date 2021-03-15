@@ -3,12 +3,6 @@
 #ifdef __amd64__
 #define STKTO(x) asm volatile ("mov %0, %%rsp" : : "r"(x))
 #endif
-#ifdef __i386__
-#define STKTO(x) asm volatile ("mov %0, %%esp" : : "r"(x))
-#endif
-#ifdef __aarch64__
-#define STKTO(x) asm volatile ("mov sp, %0" : : "r"(x))
-#endif
 
 static void *
 grow(void *arr, size_t len, size_t *cap, size_t elsize)
@@ -58,10 +52,10 @@ gthr_loop_list_get(struct gthr_loop *gl)
 }
 
 static void
-gthr_switch(jmp_buf from, jmp_buf to)
+gthr_switch(struct gthr_jmp *from, struct gthr_jmp *to)
 {
-	if(!setjmp(from))
-		longjmp(to, 1);
+	if(!gthr_setjmp(from))
+		gthr_longjmp(to, 1);
 }
 
 _Thread_local struct gthr_loop	*_gthr_loop	= NULL;
@@ -78,7 +72,7 @@ gthr_create(void (*fun)(void*), void *args)
 	gt->fun = fun;
 	gt->args = args;
 	_gthr = gt;
-	if(!setjmp(_gthr_loop->link)){
+	if(!gthr_setjmp(&_gthr_loop->link)){
 		STKTO(end);
 		gthr_wrap();
 	}
@@ -119,16 +113,16 @@ gthr_destroy(struct gthr *gt)
 void
 gthr_wrap()
 {
-	gthr_switch(_gthr->jmp, _gthr_loop->link);
+	gthr_switch(&_gthr->jmp, &_gthr_loop->link);
 	_gthr->fun(_gthr->args);
-	gthr_switch(_gthr->jmp, _gthr_loop->loop);
+	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 void
 gthr_yield()
 {
 	_gthr->ystat = GTHR_YIELD;
-	gthr_switch(_gthr->jmp, _gthr_loop->loop);
+	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 int
@@ -139,7 +133,7 @@ gthr_wait_pollfd(struct pollfd pfd)
 	_gthr_loop->inpoll[_gthr_loop->inpolll++] = _gthr;
 	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
-	gthr_switch(_gthr->jmp, _gthr_loop->loop);
+	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
 	return _gthr->werr;
 }
 
@@ -200,7 +194,7 @@ gthr_delay(long ms)
 	_gthr_loop->sleep = grow(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
 
 	_gthr->ystat = GTHR_LAISSEZ;
-	gthr_switch(_gthr->jmp, _gthr_loop->loop);
+	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 void
@@ -252,7 +246,7 @@ gthr_loop_do()
 
 	gt->ystat = GTHR_RETURN;
 	_gthr = gt;
-	gthr_switch(_gthr_loop->loop, _gthr->jmp);
+	gthr_switch(&_gthr_loop->loop, &_gthr->jmp);
 	_gthr = NULL;
 	gt->werr = 0;
 
@@ -347,3 +341,31 @@ gthr_loop_run(struct gthr_loop *gl)
 
 	_gthr_loop = NULL;
 }
+
+#if defined(__amd64__)
+asm("gthr_setjmp:\n"
+	"mov %rbx, (%rdi)\n"
+	"lea 8(%rsp), %rcx\n"
+	"mov %rcx, 8(%rdi)\n"
+	"mov %rbp, 16(%rdi)\n"
+	"mov %r12, 24(%rdi)\n"
+	"mov %r13, 32(%rdi)\n"
+	"mov %r14, 40(%rdi)\n"
+	"mov %r15, 48(%rdi)\n"
+	"mov (%rsp), %rcx\n"
+	"mov %rcx, 56(%rdi)\n"
+	"xor %rax, %rax\n"
+	"ret\n"
+	);
+asm("gthr_longjmp:\n"
+	"mov (%rdi), %rbx\n"
+	"mov 8(%rdi), %rsp\n"
+	"mov 16(%rdi), %rbp\n"
+	"mov 24(%rdi), %r12\n"
+	"mov 32(%rdi), %r13\n"
+	"mov 40(%rdi), %r14\n"
+	"mov 48(%rdi), %r15\n"
+	"mov %rsi, %rax\n"
+	"jmp *56(%rdi)\n"
+	"ret\n");
+#endif

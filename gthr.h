@@ -2,14 +2,17 @@
 #define GTHR_H
 
 #include <stdlib.h>
-/* some libcs implement longjmp_chk to prevent doing weird stuff */
-#undef __USE_FORTIFY_LEVEL
-#include <setjmp.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 #include <poll.h>
 #include <sys/socket.h>
+
+struct gthr_jmp{
+#if defined(__amd64__)
+	uint64_t rbx, rsp, rbp, r[4], rip;
+#endif
+};
 
 enum yield_status {
 	GTHR_RETURN,
@@ -20,7 +23,7 @@ enum yield_status {
 struct gthr {
 	char 				*sdata;
 	size_t				ssize;
-	jmp_buf 			jmp;
+	struct gthr_jmp 	jmp;
 	enum yield_status	ystat;
 	short				werr;
 	struct timespec		time;
@@ -31,7 +34,7 @@ struct gthr {
 };
 
 struct gthr_loop {
-	jmp_buf			loop, link;
+	struct gthr_jmp	loop, link;
 	struct pollfd	*pfd;
 	size_t			pfdl, pfdc;
 	struct gthr		**inpoll;
@@ -75,4 +78,8 @@ void gthr_loop_poll(int timeout);
 
 void gthr_loop_run(struct gthr_loop *gl);
 
+#if defined(__amd64__)
+int gthr_setjmp(struct gthr_jmp *);
+void gthr_longjmp(struct gthr_jmp *, int val);
+#endif
 #endif
