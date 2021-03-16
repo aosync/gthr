@@ -23,7 +23,7 @@ enum yield_status {
 };
 
 struct gthr {
-	char 				*sdata;
+	void 				*sdata;
 	size_t				ssize;
 	struct gthr_jmp 	jmp;
 	enum yield_status	ystat;

@@ -66,8 +66,8 @@ gthr_create(void (*fun)(void*), void *args)
 {
 	struct gthr *tmp = _gthr;
 	struct gthr *gt = malloc(sizeof(struct gthr));
-	gthr_init(gt, 32 * 1024);
-	char *end = gt->sdata + gt->ssize;
+	gthr_init(gt, 8);
+	void *end = gt->sdata + gt->ssize - 2*sizeof(void *);
 	gt->gl = _gthr_loop;
 	gt->fun = fun;
 	gt->args = args;
@@ -95,11 +95,11 @@ gthr_init(struct gthr *gt, size_t size)
 	gt->gl = NULL;
 	gt->args = NULL;
 	gt->werr = 0;
-	gt->sdata = mmap(NULL, size * sizeof(char), PROT_EXEC|PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE|MAP_STACK, -1, 0);
-	//gt->sdata = malloc(size * sizeof(char));
-	if (!gt->sdata)
+	long ps = sysconf(_SC_PAGESIZE);
+	gt->ssize = (size+1)*ps;
+	gt->sdata = mmap(NULL, gt->ssize, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE|MAP_STACK, -1, 0);
+	if(gt->sdata == MAP_FAILED)
 		return 0;
-	gt->ssize = size * sizeof(char);
 	gt->next = NULL;
 	return 1;
 }
