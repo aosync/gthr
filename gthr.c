@@ -67,7 +67,7 @@ gthr_create(void (*fun)(void*), void *args)
 	struct gthr *tmp = _gthr;
 	struct gthr *gt = malloc(sizeof(struct gthr));
 	gthr_init(gt, 8);
-	void *end = gt->sdata + gt->ssize - 2*sizeof(void *);
+	void *end = gt->sdata + gt->ssize;
 	gt->gl = _gthr_loop;
 	gt->fun = fun;
 	gt->args = args;
