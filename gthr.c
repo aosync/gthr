@@ -1,7 +1,9 @@
 #include "gthr.h"
 
-#ifdef __amd64__
+#if defined(__amd64__)
 #define STKTO(x) asm volatile ("mov %0, %%rsp" : : "r"(x))
+#elif defined(__arch64__)
+#define STKTO(x) asm volatile ("mov sp, %0" : : "r"(x))
 #endif
 
 static void *
@@ -357,8 +359,7 @@ asm("gthr_setjmp:\n"
 	"mov (%rsp), %rcx\n"
 	"mov %rcx, 56(%rdi)\n"
 	"xor %rax, %rax\n"
-	"ret\n"
-	);
+	"ret");
 asm("gthr_longjmp:\n"
 	"mov (%rdi), %rbx\n"
 	"mov 8(%rdi), %rsp\n"
@@ -369,5 +370,37 @@ asm("gthr_longjmp:\n"
 	"mov 48(%rdi), %r15\n"
 	"mov %rsi, %rax\n"
 	"jmp *56(%rdi)\n"
-	"ret\n");
+	"ret");
+#elif defined(__arch64__)
+asm("gthr_setjmp:\n"
+	"mov x2, sp\n"
+	"str x2, [x0, #0]\n"
+	"stp x19, x20, [x0, #8]\n"
+	"stp x21, x22, [x0, #24]\n"
+	"stp x23, x24, [x0, #40]\n"
+	"stp x25, x26, [x0, #56]\n"
+	"stp x27, x28, [x0, #72]\n"
+	"stp x29, x30, [x0, #88]\n" /* x30: LP, where we must jump */
+	"stp d8, d9, [x0, #104]\n"
+	"stp d10, d11, [x0, #120]\n"
+	"stp d12, d13, [x0, #136]\n"
+	"stp d14, d15, [x0, #152]\n"
+	"mov x0, #0\n"
+	"ret");
+asm("gthr_longjmp:\n"
+	"mov x0, x1\n"
+	"ldr x2, [x0, #0]\n"
+	"mov sp, x2\n"
+	"ldp x19, x20, [x0, #8]\n"
+	"ldp x21, x22, [x0, #24]\n"
+	"ldp x23, x24, [x0, #40]\n"
+	"ldp x25, x26, [x0, #56]\n"
+	"ldp x27, x28, [x0, #72]\n"
+	"ldp x29, x30, [x0, #88]\n"
+	"ldp d8, d9, [x0, #104]\n"
+	"ldp d10, d11, [x0, #120]\n"
+	"ldp d12, d13, [x0, #136]\n"
+	"ldp d14, d15, [x0, #152]\n"
+	"br x30\n"
+	"ret");
 #endif
