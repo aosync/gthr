@@ -13,7 +13,7 @@
 struct gthr_jmp{
 #if defined(__amd64__)
 	uint64_t rbx, rsp, rbp, r[4], rip;
-#elif defined(__arch64__)
+#elif defined(__aarch64__)
 	uint64_t sp, x[12] /* r19-r30 */, d[8];
 #endif
 };

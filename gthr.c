@@ -2,7 +2,7 @@
 
 #if defined(__amd64__)
 #define STKTO(x) asm volatile ("mov %0, %%rsp" : : "r"(x))
-#elif defined(__arch64__)
+#elif defined(__aarch64__)
 #define STKTO(x) asm volatile ("mov sp, %0" : : "r"(x))
 #endif
 
@@ -369,9 +369,8 @@ asm("gthr_longjmp:\n"
 	"mov 40(%rdi), %r14\n"
 	"mov 48(%rdi), %r15\n"
 	"mov %rsi, %rax\n"
-	"jmp *56(%rdi)\n"
-	"ret");
-#elif defined(__arch64__)
+	"jmp *56(%rdi)\n");
+#elif defined(__aarch64__)
 asm("gthr_setjmp:\n"
 	"mov x2, sp\n"
 	"str x2, [x0, #0]\n"
@@ -388,7 +387,6 @@ asm("gthr_setjmp:\n"
 	"mov x0, #0\n"
 	"ret");
 asm("gthr_longjmp:\n"
-	"mov x0, x1\n"
 	"ldr x2, [x0, #0]\n"
 	"mov sp, x2\n"
 	"ldp x19, x20, [x0, #8]\n"
@@ -401,6 +399,6 @@ asm("gthr_longjmp:\n"
 	"ldp d10, d11, [x0, #120]\n"
 	"ldp d12, d13, [x0, #136]\n"
 	"ldp d14, d15, [x0, #152]\n"
-	"br x30\n"
-	"ret");
+	"mov x0, x1\n"
+	"br x30\n");
 #endif
