@@ -10,6 +10,10 @@
 #include <poll.h>
 #include <sys/socket.h>
 
+/* this is temporary, this will eventually get dynamic when
+ * I find a good way */
+#define GTHR_BIN 64
+
 struct gthr_jmp{
 #if defined(__amd64__)
 	uint64_t rbx, rsp, rbp, r[4], rip;
@@ -45,6 +49,8 @@ struct gthr_loop {
 	size_t			inpolll, inpollc;
 	struct gthr		**sleep;
 	size_t			sleepl, sleepc;
+	struct gthr		*bin[GTHR_BIN];
+	size_t			binl;
 
 	struct gthr		*head, *tail;
 	int				minto;
@@ -56,6 +62,7 @@ extern _Thread_local struct gthr		*_gthr;
 void gthr_create(void (*fun)(void*), void *args);
 void gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args);
 int gthr_init(struct gthr *gt, size_t size);
+void gthr_finish(struct gthr *gt);
 void gthr_destroy(struct gthr *gt);
 
 void gthr_wrap(void);

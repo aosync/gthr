@@ -67,8 +67,12 @@ void
 gthr_create(void (*fun)(void*), void *args)
 {
 	struct gthr *tmp = _gthr;
-	struct gthr *gt = malloc(sizeof(struct gthr));
-	gthr_init(gt, 8);
+	struct gthr *gt;
+	if(_gthr_loop->binl == 0){
+		gt = malloc(sizeof(struct gthr));
+		gthr_init(gt, 8);
+	} else
+		gt = _gthr_loop->bin[--_gthr_loop->binl];
 	void *end = gt->sdata + gt->ssize - 2 * sizeof(void *);
 	gt->gl = _gthr_loop;
 	gt->fun = fun;
@@ -107,11 +111,22 @@ gthr_init(struct gthr *gt, size_t size)
 }
 
 void
-gthr_destroy(struct gthr *gt)
+gthr_finish(struct gthr *gt)
 {
 	munmap(gt->sdata, gt->ssize);
-	//free(gt->sdata);
 	free(gt);
+}
+
+void
+gthr_destroy(struct gthr *gt)
+{
+	if(_gthr_loop->binl >= GTHR_BIN)
+		gthr_finish(gt);
+	else{
+		gt->fun = NULL;
+		gt->args = NULL;
+		_gthr_loop->bin[_gthr_loop->binl++] = gt;
+	}
 }
 
 void
@@ -217,6 +232,8 @@ gthr_loop_init(struct gthr_loop *gl)
 	gl->sleepl = 0;
 	gl->sleepc = 1;
 
+	gl->binl = 0;
+
 	gl->head = gl->tail = NULL;
 }
 
@@ -226,18 +243,23 @@ gthr_loop_finish(struct gthr_loop *gl)
 	int i;
 	struct gthr *next;
 	for(i = 0; i < gl->inpolll; i++)
-		gthr_destroy(gl->inpoll[i]);
+		gthr_finish(gl->inpoll[i]);
 
 	free(gl->pfd);
 	free(gl->inpoll);
 
 	for(i = 0; i < gl->sleepl; i++)
-		gthr_destroy(gl->sleep[i]);
+		gthr_finish(gl->sleep[i]);
 
 	free(gl->sleep);
+
+	for(i = 0; i < gl->binl; i++)
+		gthr_finish(gl->bin[i]);
+
+	gl->binl = 0;
 	
 	while((next = gthr_loop_list_get(gl)) != NULL)
-		gthr_destroy(next);
+		gthr_finish(next);
 }
 
 void
