@@ -102,12 +102,11 @@ void gm(void *v) {
 }
 
 void test(void *v) {
-	while (1) {
+	int b = 0;
+	while (b++ < 500000) {
 		gthr_create(&gm, NULL);
-		// printf("[test] ignore\n");
 		printf("%p\n", _gthr);
-		//gthr_yield();
-		gthr_delay(1);
+		gthr_yield();
 	}
 }
 
@@ -119,11 +118,8 @@ int main() {
 	int a = 0;
 	gthr_create_on(&gl, &test, NULL);
 	gthr_create_on(&gl, &test, NULL);
-	while (a < 2) {
-		//gthr_create(&gl, &gm, NULL);
-		a++;
-	}
-	while (i < 1000000) gthr_loop_run(&gl);
+	while (gthr_loop_run(&gl));
+	printf("Deadlock!\n");
 
 	gthr_loop_finish(&gl);
 	return 0;

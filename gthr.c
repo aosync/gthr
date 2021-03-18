@@ -356,16 +356,19 @@ gthr_loop_poll(int timeout)
 	}
 }
 
-void
+char
 gthr_loop_run(struct gthr_loop *gl)
 {
 	_gthr_loop = gl;
 
 	gthr_loop_do();
 	int timeout = gthr_loop_wakeup();
+	if(_gthr_loop->head == NULL && _gthr_loop->sleepl == 0 && _gthr_loop->inpolll == 0)
+		return 0;
 	gthr_loop_poll(_gthr_loop->head ? 0 : timeout);
 
 	_gthr_loop = NULL;
+	return 1;
 }
 
 #if defined(__amd64__)
