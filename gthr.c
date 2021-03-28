@@ -73,7 +73,7 @@ gthr_create(void (*fun)(void*), void *args)
 		gthr_init(gt, 8);
 	} else
 		gt = _gthr_loop->bin[--_gthr_loop->binl];
-	void *end = gt->sdata + gt->ssize - 2 * sizeof(void *);
+	void *end = (void *)((size_t)(gt->sdata + gt->ssize - 1) & ~0xF); /* align properly */
 	gt->gl = _gthr_loop;
 	gt->fun = fun;
 	gt->args = args;
