@@ -1,11 +1,5 @@
 #include "gthr.h"
 
-#if defined(__amd64__)
-#define STKTO(x) asm volatile ("mov %0, %%rsp" : : "r"(x))
-#elif defined(__aarch64__)
-#define STKTO(x) asm volatile ("mov sp, %0" : : "r"(x))
-#endif
-
 static void *
 grow(void *arr, size_t len, size_t *cap, size_t elsize)
 {
@@ -53,13 +47,6 @@ gthr_loop_list_get(struct gthr_loop *gl)
 	return res;
 }
 
-static void
-gthr_switch(struct gthr_jmp *from, struct gthr_jmp *to)
-{
-	if(!gthr_setjmp(from))
-		gthr_longjmp(to, 1);
-}
-
 _Thread_local struct gthr_loop	*_gthr_loop	= NULL;
 _Thread_local struct gthr		*_gthr		= NULL;
 
@@ -78,8 +65,8 @@ gthr_create(void (*fun)(void*), void *args)
 	gt->fun = fun;
 	gt->args = args;
 	_gthr = gt;
-	if(!gthr_setjmp(&_gthr_loop->link)){
-		STKTO(end);
+	if(!ctx_save(&_gthr_loop->link)){
+		ctx_stack_to(end);
 		gthr_wrap();
 	}
 	gthr_loop_list_append(_gthr_loop, gt);
@@ -132,16 +119,16 @@ gthr_destroy(struct gthr *gt)
 void
 gthr_wrap()
 {
-	gthr_switch(&_gthr->jmp, &_gthr_loop->link);
+	ctx_switch(&_gthr->jmp, &_gthr_loop->link);
 	_gthr->fun(_gthr->args);
-	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
+	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 void
 gthr_yield()
 {
 	_gthr->ystat = GTHR_YIELD;
-	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
+	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 int
@@ -152,7 +139,7 @@ gthr_wait_pollfd(struct pollfd pfd)
 	_gthr_loop->inpoll[_gthr_loop->inpolll++] = _gthr;
 	_gthr_loop->inpoll = grow(_gthr_loop->inpoll, _gthr_loop->inpolll, &_gthr_loop->inpollc, sizeof(struct gthr *));
 	_gthr->ystat = GTHR_LAISSEZ;
-	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
+	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
 	return _gthr->werr;
 }
 
@@ -213,7 +200,7 @@ gthr_delay(long ms)
 	_gthr_loop->sleep = grow(_gthr_loop->sleep, _gthr_loop->sleepl, &_gthr_loop->sleepc, sizeof(struct gthr *));
 
 	_gthr->ystat = GTHR_LAISSEZ;
-	gthr_switch(&_gthr->jmp, &_gthr_loop->loop);
+	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
 }
 
 void
@@ -272,7 +259,7 @@ gthr_loop_do()
 
 	gt->ystat = GTHR_RETURN;
 	_gthr = gt;
-	gthr_switch(&_gthr_loop->loop, &_gthr->jmp);
+	ctx_switch(&_gthr_loop->loop, &_gthr->jmp);
 	_gthr = NULL;
 	gt->werr = 0;
 
@@ -370,60 +357,3 @@ gthr_loop_run(struct gthr_loop *gl)
 	_gthr_loop = NULL;
 	return 1;
 }
-
-#if defined(__amd64__)
-asm("gthr_setjmp:\n"
-	"mov %rbx, (%rdi)\n"
-	"lea 8(%rsp), %rcx\n"
-	"mov %rcx, 8(%rdi)\n"
-	"mov %rbp, 16(%rdi)\n"
-	"mov %r12, 24(%rdi)\n"
-	"mov %r13, 32(%rdi)\n"
-	"mov %r14, 40(%rdi)\n"
-	"mov %r15, 48(%rdi)\n"
-	"mov (%rsp), %rcx\n"
-	"mov %rcx, 56(%rdi)\n"
-	"xor %rax, %rax\n"
-	"ret");
-asm("gthr_longjmp:\n"
-	"mov (%rdi), %rbx\n"
-	"mov 8(%rdi), %rsp\n"
-	"mov 16(%rdi), %rbp\n"
-	"mov 24(%rdi), %r12\n"
-	"mov 32(%rdi), %r13\n"
-	"mov 40(%rdi), %r14\n"
-	"mov 48(%rdi), %r15\n"
-	"mov %rsi, %rax\n"
-	"jmp *56(%rdi)\n");
-#elif defined(__aarch64__)
-asm("gthr_setjmp:\n"
-	"mov x2, sp\n"
-	"str x2, [x0, #0]\n"
-	"stp x19, x20, [x0, #8]\n"
-	"stp x21, x22, [x0, #24]\n"
-	"stp x23, x24, [x0, #40]\n"
-	"stp x25, x26, [x0, #56]\n"
-	"stp x27, x28, [x0, #72]\n"
-	"stp x29, x30, [x0, #88]\n" /* x30: LP, where we must jump */
-	"stp d8, d9, [x0, #104]\n"
-	"stp d10, d11, [x0, #120]\n"
-	"stp d12, d13, [x0, #136]\n"
-	"stp d14, d15, [x0, #152]\n"
-	"mov x0, #0\n"
-	"ret");
-asm("gthr_longjmp:\n"
-	"ldr x2, [x0, #0]\n"
-	"mov sp, x2\n"
-	"ldp x19, x20, [x0, #8]\n"
-	"ldp x21, x22, [x0, #24]\n"
-	"ldp x23, x24, [x0, #40]\n"
-	"ldp x25, x26, [x0, #56]\n"
-	"ldp x27, x28, [x0, #72]\n"
-	"ldp x29, x30, [x0, #88]\n"
-	"ldp d8, d9, [x0, #104]\n"
-	"ldp d10, d11, [x0, #120]\n"
-	"ldp d12, d13, [x0, #136]\n"
-	"ldp d14, d15, [x0, #152]\n"
-	"mov x0, x1\n"
-	"br x30\n");
-#endif

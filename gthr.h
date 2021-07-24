@@ -1,6 +1,8 @@
 #ifndef GTHR_H
 #define GTHR_H
 
+#include <ctx.h>
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -14,13 +16,6 @@
  * I find a good way */
 #define GTHR_BIN 64
 
-struct gthr_jmp{
-#if defined(__amd64__)
-	uint64_t rbx, rsp, rbp, r[4], rip;
-#elif defined(__aarch64__)
-	uint64_t sp, x[12] /* r19-r30 */, d[8];
-#endif
-};
 
 enum yield_status {
 	GTHR_RETURN,
@@ -31,7 +26,7 @@ enum yield_status {
 struct gthr {
 	void 				*sdata;
 	size_t				ssize;
-	struct gthr_jmp 	jmp;
+	struct ctx 	jmp;
 	enum yield_status	ystat;
 	short				werr;
 	struct timespec		time;
@@ -42,7 +37,7 @@ struct gthr {
 };
 
 struct gthr_loop {
-	struct gthr_jmp	loop, link;
+	struct ctx	loop, link;
 	struct pollfd	*pfd;
 	size_t			pfdl, pfdc;
 	struct gthr		**inpoll;
