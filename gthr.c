@@ -255,12 +255,12 @@ gthr_loop_do()
 int
 gthr_loop_wakeup()
 {
-	if (_vec_header(_gthr_loop->sleep)->len == 0) return -1;
+	if (vec_len(_gthr_loop->sleep) == 0) return -1;
 	struct gthr *tgt;
 	struct timespec now, cur;
 	int msmin = _gthr_loop->minto, ms, one = 0;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	for (int i = 0; i < _vec_header(_gthr_loop->sleep)->len; i++) {
+	for (int i = 0; i < vec_len(_gthr_loop->sleep); i++) {
 		cur = _gthr_loop->sleep[i]->time;
 		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
 
@@ -268,7 +268,7 @@ gthr_loop_wakeup()
 			// swap [i] to end then add to exec queue.
 			tgt = _gthr_loop->sleep[i];
 
-			_gthr_loop->sleep[i] = _gthr_loop->sleep[_vec_header(_gthr_loop->sleep)->len - 1];
+			_gthr_loop->sleep[i] = _gthr_loop->sleep[vec_len(_gthr_loop->sleep) - 1];
 
 			vec_pop(_gthr_loop->sleep);
 
@@ -286,12 +286,11 @@ gthr_loop_wakeup()
 void
 gthr_loop_poll(int timeout)
 {
-	int rc = poll(_gthr_loop->pfd, _vec_header(_gthr_loop->pfd)->len, timeout);
+	int rc = poll(_gthr_loop->pfd, vec_len(_gthr_loop->pfd), timeout);
 	if (rc < 1) return; // check to see how to handle this
 
-	struct pollfd tpfd;
 	struct gthr *tgt;
-	for (int i = 0; i < _vec_header(_gthr_loop->pfd)->len; i++) {
+	for (int i = 0; i < vec_len(_gthr_loop->pfd); i++) {
 		// if pollfd not triggered, continue
 		if (!_gthr_loop->pfd[i].revents) continue;
 
@@ -300,12 +299,12 @@ gthr_loop_poll(int timeout)
 			_gthr_loop->inpoll[i]->werr = -1;
 
 		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
-		_gthr_loop->pfd[i] = _gthr_loop->pfd[_vec_header(_gthr_loop->pfd)->len - 1];
+		_gthr_loop->pfd[i] = _gthr_loop->pfd[vec_len(_gthr_loop->pfd) - 1];
 		vec_pop(_gthr_loop->pfd);
 
 		// same thing for the corresponding gthread, but put it to run
 		tgt = _gthr_loop->inpoll[i];
-		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[_vec_header(_gthr_loop->inpoll)->len - 1]; /* already decremented */
+		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[vec_len(_gthr_loop->inpoll) - 1]; /* already decremented */
 		vec_pop(_gthr_loop->inpoll);
 
 		gthr_loop_list_append(_gthr_loop, tgt);
@@ -320,7 +319,7 @@ gthr_loop_run(struct gthr_loop *gl)
 
 	gthr_loop_do();
 	int timeout = gthr_loop_wakeup();
-	if(_gthr_loop->head == NULL && _vec_header(_gthr_loop->sleep)->len == 0 && _vec_header(_gthr_loop->inpoll)->len == 0)
+	if(_gthr_loop->head == NULL && vec_len(_gthr_loop->sleep) == 0 && vec_len(_gthr_loop->inpoll) == 0)
 		return 0;
 	gthr_loop_poll(_gthr_loop->head ? 0 : timeout);
 

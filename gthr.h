@@ -80,7 +80,4 @@ int gthr_loop_wakeup(void);
 void gthr_loop_poll(int timeout);
 
 char gthr_loop_run(struct gthr_loop *gl);
-
-int gthr_setjmp(struct gthr_jmp *);
-void gthr_longjmp(struct gthr_jmp *, int val);
 #endif
