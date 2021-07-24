@@ -1,6 +1,7 @@
 #ifndef GTHR_H
 #define GTHR_H
 
+#include <vec.h>
 #include <ctx.h>
 
 #include <stdlib.h>
@@ -15,7 +16,6 @@
 /* this is temporary, this will eventually get dynamic when
  * I find a good way */
 #define GTHR_BIN 64
-
 
 enum yield_status {
 	GTHR_RETURN,
@@ -38,12 +38,9 @@ struct gthr {
 
 struct gthr_loop {
 	struct ctx	loop, link;
-	struct pollfd	*pfd;
-	size_t			pfdl, pfdc;
-	struct gthr		**inpoll;
-	size_t			inpolll, inpollc;
-	struct gthr		**sleep;
-	size_t			sleepl, sleepc;
+	vec(struct pollfd)	pfd;
+	vec(struct gthr *)	inpoll;
+	vec(struct gthr *)	sleep;
 	struct gthr		*bin[GTHR_BIN];
 	size_t			binl;
 
@@ -51,8 +48,8 @@ struct gthr_loop {
 	int				minto;
 };
 
-extern _Thread_local struct gthr_loop	*_gthr_loop;
-extern _Thread_local struct gthr		*_gthr;
+extern _Thread_local struct gthr_loop  *_gthr_loop;
+extern _Thread_local struct gthr       *_gthr;
 
 void gthr_create(void (*fun)(void*), void *args);
 void gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args);
