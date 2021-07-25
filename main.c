@@ -101,19 +101,19 @@ void gm(void *v) {
 	printf("%d finished\n", i);
 }
 
-void test(void *v) {
+/*void test(void *v) {
 	int b = 0;
 	while (b++ < 500000) {
 		gthr_create(&gm, NULL);
 		printf("%p\n", _gthr);
 		gthr_yield();
 	}
-}
+	}*/
 
 #include <stdio.h>
 
 int main() {
-	struct gthr_loop gl;
+	/*struct gthr_loop gl;
 	gthr_loop_init(&gl);
 	int a = 0;
 	gthr_create_on(&gl, &test, NULL);
@@ -121,6 +121,6 @@ int main() {
 	while (gthr_loop_run(&gl));
 	printf("Deadlock!\n");
 
-	gthr_loop_finish(&gl);
+	gthr_loop_finish(&gl);*/
 	return 0;
 }

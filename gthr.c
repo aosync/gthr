@@ -1,328 +1,74 @@
 #include "gthr.h"
 
-static void
-gthr_loop_list_append(struct gthr_loop *gl, struct gthr *gt)
+void
+gthr_context_init(struct gthr_context *gctx)
 {
-	if(!gl->head)
-		gl->head = gl->tail = gt;
-	else{
-		gl->tail->next = gt;
-		gl->tail = gt;
+	*gctx = (struct gthr_context){
+		.exqueue_lock = spin_new(NULL),
+
+		.sleep_lock = spin_new(NULL),
+		.sleep = vec_new(struct gthr *),
+
+		.plist_lock = spin_new(NULL),
+		.plist_pfd = vec_new(struct pollfd),
+		.plist_gthr = vec_new(struct gthr *),
+
+		.bin_lock = spin_new(NULL)
+	};
+}
+
+void
+gthr_context_finish(struct gthr_context *gctx)
+{
+	/* locking is not needed here but i still do it */
+	spin(void *_, &gctx->exqueue_lock){
+		while(gctx->exqueue_head)
+			gthr_free(gthr_context_exqueue_recv(gctx));
 	}
-}
-
-static struct gthr *
-gthr_loop_list_get(struct gthr_loop *gl)
-{
-	struct gthr *res;
-	if(!gl->head)
-		return NULL;
-	else{
-		res = gl->head;
-		gl->head = res->next;
-		if(!gl->head)
-			gl->tail = NULL;
-		res->next = NULL;
+	spin(void *_, &gctx->sleep_lock){
+		vec_foreach(struct gthr *, it, gctx->sleep){
+			gthr_free(it);
+		}
+		vec_free(gctx->sleep);
 	}
-	return res;
-}
-
-_Thread_local struct gthr_loop	*_gthr_loop	= NULL;
-_Thread_local struct gthr		*_gthr		= NULL;
-
-void
-gthr_create(void (*fun)(void*), void *args)
-{
-	struct gthr *tmp = _gthr;
-	struct gthr *gt;
-	if(_gthr_loop->binl == 0){
-		gt = malloc(sizeof(struct gthr));
-		gthr_init(gt, 8);
-	} else
-		gt = _gthr_loop->bin[--_gthr_loop->binl];
-	void *end = (void *)((size_t)(gt->sdata + gt->ssize - 1) & ~0xF); /* align properly */
-	gt->gl = _gthr_loop;
-	gt->fun = fun;
-	gt->args = args;
-	_gthr = gt;
-	if(!ctx_save(&_gthr_loop->link)){
-		ctx_stack_to(end);
-		gthr_wrap();
+	spin(void *_, &gctx->plist_lock){
+		vec_free(gctx->plist_pfd);
+		vec_foreach(struct gthr *, it, gctx->plist_gthr){
+			gthr_free(it);
+		}
+		vec_free(gctx->plist_gthr);
 	}
-	gthr_loop_list_append(_gthr_loop, gt);
-	_gthr = tmp;
-}
-
-void
-gthr_create_on(struct gthr_loop *gl, void (*fun)(void*), void *args)
-{
-	struct gthr_loop *tmp = _gthr_loop;
-	_gthr_loop = gl;
-	gthr_create(fun, args);
-	_gthr_loop = tmp;
-}
-
-int
-gthr_init(struct gthr *gt, size_t size)
-{
-	gt->gl = NULL;
-	gt->args = NULL;
-	gt->werr = 0;
-	long ps = sysconf(_SC_PAGESIZE);
-	gt->ssize = (size+1)*ps;
-	gt->sdata = mmap(NULL, gt->ssize, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE|MAP_STACK, -1, 0);
-	if(gt->sdata == MAP_FAILED)
-		return 0;
-	gt->next = NULL;
-	return 1;
-}
-
-void
-gthr_finish(struct gthr *gt)
-{
-	munmap(gt->sdata, gt->ssize);
-	free(gt);
-}
-
-void
-gthr_destroy(struct gthr *gt)
-{
-	if(_gthr_loop->binl >= GTHR_BIN)
-		gthr_finish(gt);
-	else{
-		gt->fun = NULL;
-		gt->args = NULL;
-		_gthr_loop->bin[_gthr_loop->binl++] = gt;
-	}
-}
-
-void
-gthr_wrap()
-{
-	ctx_switch(&_gthr->jmp, &_gthr_loop->link);
-	_gthr->fun(_gthr->args);
-	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
-}
-
-void
-gthr_yield()
-{
-	_gthr->ystat = GTHR_YIELD;
-	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
-}
-
-int
-gthr_wait_pollfd(struct pollfd pfd)
-{
-	vec_push(_gthr_loop->pfd, pfd);
-	vec_push(_gthr_loop->inpoll, _gthr);
-	_gthr->ystat = GTHR_LAISSEZ;
-	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
-	return _gthr->werr;
-}
-
-int
-gthr_wait_readable(int fd)
-{
-	struct pollfd pfd;
-	pfd.fd = fd;
-	pfd.events = POLLIN;
-	return gthr_wait_pollfd(pfd);
-}
-
-int
-gthr_wait_writeable(int fd)
-{
-	struct pollfd pfd;
-	pfd.fd = fd;
-	pfd.events = POLLOUT;
-	return gthr_wait_pollfd(pfd);
-}
-
-ssize_t
-gthr_read(int fd, void *buf, size_t count)
-{
-	if (gthr_wait_readable(fd)) return -1;
-	return read(fd, buf, count);
-}
-
-ssize_t
-gthr_recv(int sockfd, void *buf, size_t length, int flags)
-{
-	if (gthr_wait_readable(sockfd)) return -1;
-	return recv(sockfd, buf, length, flags);
-}
-
-ssize_t
-gthr_write(int fd, void *buf, size_t count)
-{
-	if (gthr_wait_writeable(fd)) return -1;
-	return write(fd, buf, count);
-}
-
-ssize_t
-gthr_send(int sockfd, void *buf, size_t length, int flags)
-{
-	if (gthr_wait_writeable(sockfd)) return -1;
-	return send(sockfd, buf, length, flags);
-}
-
-void
-gthr_delay(long ms)
-{
-	clock_gettime(CLOCK_MONOTONIC, &_gthr->time);
-	_gthr->time.tv_sec += ms / 1000;
-	_gthr->time.tv_nsec += (ms * 1000000) % 1000000000;
-
-	vec_push(_gthr_loop->sleep, _gthr);
-
-	_gthr->ystat = GTHR_LAISSEZ;
-	ctx_switch(&_gthr->jmp, &_gthr_loop->loop);
-}
-
-void
-gthr_loop_init(struct gthr_loop *gl)
-{
-	gl->minto = 2000;
-
-	gl->pfd = vec_new(struct pollfd);
-	gl->inpoll = vec_new(struct gthr *);
-
-	gl->sleep = vec_new(struct gthr *);
-
-	gl->binl = 0;
-
-	gl->head = gl->tail = NULL;
-}
-
-void
-gthr_loop_finish(struct gthr_loop *gl)
-{
-	int i;
-	struct gthr *next;
-	vec_foreach(struct gthr *, g, gl->inpoll) {
-		gthr_finish(g);
-	}
-
-	free(gl->pfd);
-	free(gl->inpoll);
-
-	vec_foreach(struct gthr *, g, gl->sleep) {
-		gthr_finish(g);
-	}
-
-	free(gl->sleep);
-
-	for(i = 0; i < gl->binl; i++)
-		gthr_finish(gl->bin[i]);
-
-	gl->binl = 0;
-	
-	while((next = gthr_loop_list_get(gl)) != NULL)
-		gthr_finish(next);
-}
-
-void
-gthr_loop_do()
-{
-	struct gthr *gt;
-
-	if((gt = gthr_loop_list_get(_gthr_loop)) == NULL)
-		return;
-
-	gt->ystat = GTHR_RETURN;
-	_gthr = gt;
-	ctx_switch(&_gthr_loop->loop, &_gthr->jmp);
-	_gthr = NULL;
-	gt->werr = 0;
-
-	switch(gt->ystat) {
-	case GTHR_YIELD:
-		// gthread yielded. append to back of list
-		gthr_loop_list_append(_gthr_loop, gt);
-		break;
-	case GTHR_RETURN:
-		// gthread returned. free.
-		gthr_destroy(gt);
-		break;
-	default:
-		// gthread blocks
-		/* nothing to do here */
-		break;
-	}
-}
-
-int
-gthr_loop_wakeup()
-{
-	if (vec_len(_gthr_loop->sleep) == 0) return -1;
-	struct gthr *tgt;
-	struct timespec now, cur;
-	int msmin = _gthr_loop->minto, ms, one = 0;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	for (int i = 0; i < vec_len(_gthr_loop->sleep); i++) {
-		cur = _gthr_loop->sleep[i]->time;
-		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
-
-		if (ms <= 0) {
-			// swap [i] to end then add to exec queue.
-			tgt = _gthr_loop->sleep[i];
-
-			_gthr_loop->sleep[i] = _gthr_loop->sleep[vec_len(_gthr_loop->sleep) - 1];
-
-			vec_pop(_gthr_loop->sleep);
-
-			gthr_loop_list_append(_gthr_loop, tgt);
-			i--;
-		} else if (ms <= msmin) {
-			one = 1;
-			msmin = ms;
+	spin(void *_, &gctx->bin_lock){
+		for(unsigned i = 0; i < gctx->bin_len; i++){
+			gthr_free(gctx->bin[i]);
 		}
 	}
-	if (!one) msmin = -1;
-	return msmin;
+}
+
+struct gthr *
+gthr_context_exqueue_recv(struct gthr_context *gctx)
+{
+	struct gthr *g;
+	spin(void *_, &gctx->exqueue_lock){
+		g = gctx->exqueue_head;
+		if(gctx->exqueue_head == gctx->exqueue_tail)
+			gctx->exqueue_head = gctx->exqueue_tail = NULL;
+		else
+			gctx->exqueue_head = gctx->exqueue_head->next;
+	}
+	g->next = NULL;
+	return g;
 }
 
 void
-gthr_loop_poll(int timeout)
+gthr_context_exqueue_send(struct gthr_context *gctx, struct gthr *g)
 {
-	int rc = poll(_gthr_loop->pfd, vec_len(_gthr_loop->pfd), timeout);
-	if (rc < 1) return; // check to see how to handle this
-
-	struct gthr *tgt;
-	for (int i = 0; i < vec_len(_gthr_loop->pfd); i++) {
-		// if pollfd not triggered, continue
-		if (!_gthr_loop->pfd[i].revents) continue;
-
-		// if error is present, set werr flag to indicate error
-		if (_gthr_loop->pfd[i].revents & POLLERR || _gthr_loop->pfd[i].revents & POLLNVAL)
-			_gthr_loop->inpoll[i]->werr = -1;
-
-		// in any case when pollfd is triggered, get rid of it (swap with end, and pop)
-		_gthr_loop->pfd[i] = _gthr_loop->pfd[vec_len(_gthr_loop->pfd) - 1];
-		vec_pop(_gthr_loop->pfd);
-
-		// same thing for the corresponding gthread, but put it to run
-		tgt = _gthr_loop->inpoll[i];
-		_gthr_loop->inpoll[i] = _gthr_loop->inpoll[vec_len(_gthr_loop->inpoll) - 1]; /* already decremented */
-		vec_pop(_gthr_loop->inpoll);
-
-		gthr_loop_list_append(_gthr_loop, tgt);
-		i--;
+	spin(void *_, &gctx->exqueue_lock){
+		if(gctx->exqueue_head == NULL)
+			gctx->exqueue_head = gctx->exqueue_tail = g;
+		else{
+			gctx->exqueue_tail->next = g;
+			gctx->exqueue_tail = g;
+		}
 	}
-}
-
-char
-gthr_loop_run(struct gthr_loop *gl)
-{
-	_gthr_loop = gl;
-
-	gthr_loop_do();
-	int timeout = gthr_loop_wakeup();
-	if(_gthr_loop->head == NULL && vec_len(_gthr_loop->sleep) == 0 && vec_len(_gthr_loop->inpoll) == 0)
-		return 0;
-	gthr_loop_poll(_gthr_loop->head ? 0 : timeout);
-
-	_gthr_loop = NULL;
-	return 1;
 }
