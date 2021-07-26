@@ -112,15 +112,23 @@ void gm(void *v) {
 
 #include <stdio.h>
 
-int main() {
-	/*struct gthr_loop gl;
-	gthr_loop_init(&gl);
-	int a = 0;
-	gthr_create_on(&gl, &test, NULL);
-	gthr_create_on(&gl, &test, NULL);
-	while (gthr_loop_run(&gl));
-	printf("Deadlock!\n");
+void
+hi(void*)
+{
+	printf("hi\n");
+	gthr_yield();
+	printf("%p %p\n", _gthr, _gthr_context);
+}
 
-	gthr_loop_finish(&gl);*/
+int main() {
+	struct gthr_context gctx;
+	gthr_context_init(&gctx);
+
+	printf("b\n");
+	gthr_create_on(&gctx, hi, NULL);
+
+	gthr_context_run_once(&gctx);
+	gthr_context_run_once(&gctx);
+	gthr_context_finish(&gctx);
 	return 0;
 }
