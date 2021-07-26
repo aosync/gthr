@@ -14,8 +14,10 @@ gthr_make(struct gthr_context *gctx, size_t stack_pages)
 		return NULL;
 	
 	struct gthr *gthr = malloc(sizeof(struct gthr));
-	if(gthr == NULL)
+	if(gthr == NULL){
+		munmap(stack_data, stack_size);
 		return NULL;
+	}
 	*gthr = (struct gthr) {
 		.context = gctx,
 		.stack_size = stack_size,
