@@ -218,7 +218,6 @@ _gthr_wrap()
 
 	_gthr->function(_gthr->args);
 
-	printf("%p in wrap %d\n", _gthr, _gthr->yield_status);
 	ctx_switch(&_gthr->ctx, &_gthr->link);
 	// unreachable
 }
