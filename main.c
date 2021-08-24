@@ -28,6 +28,7 @@ hi(void *arg)
 	while(d < 10000000){
 		d++;
 
+		for(int i = 0; i < 1000; i++);
 		gthr_yield();
 	}
 	printf("gthr %d finished counting\n", *a);

@@ -43,7 +43,7 @@ void gthr_yield(void);
 #define GTHR_THRD_CAP 64
 
 struct gthr_context{
-	struct spin exqueue_lock;
+	pthread_mutex_t exqueue_lock;
 	struct gthr  *exqueue_head;
 	struct gthr  *exqueue_tail;
 
