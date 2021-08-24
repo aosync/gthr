@@ -1,7 +1,7 @@
 #include "gthr.h"
 
-_Thread_local struct gthr *_gthr = NULL;
-_Thread_local struct gthr_context *_gthr_context = NULL;
+_Thread_local volatile struct gthr *_gthr = NULL;
+_Thread_local volatile struct gthr_context *_gthr_context = NULL;
 
 struct gthr *
 gthr_make(struct gthr_context *gctx, size_t stack_pages)
@@ -119,34 +119,64 @@ gthr_context_exqueue_send(struct gthr_context *gctx, struct gthr *g)
 	}
 }
 
-void
+char
 gthr_context_run_once(struct gthr_context *gctx)
 {
 	_gthr_context = gctx;
-	
+
 	_gthr = gthr_context_exqueue_recv(gctx);
 	if(!_gthr)
-		return;
-		
+		return 1;
+	if(_gthr->runs){
+		gthr_context_exqueue_send(gctx, _gthr);
+		return 2;
+	}
+
 	_gthr->yield_status = GTHR_RETURN;
+	_gthr->runs = 1;
 	ctx_switch(&_gthr->link, &_gthr->ctx);
+	_gthr->runs = 0;
 	_gthr->wake_errno = 0;
 
+	printf("%p in loop %d\n", _gthr, _gthr->yield_status);
 	if(_gthr->yield_status == GTHR_RETURN)
 		gthr_recycle(_gthr);
 
 	_gthr = NULL;
 	_gthr_context = NULL;
+	return 0;
 }
 
 void
 gthr_context_run(struct gthr_context *gctx)
 {
 	gctx->runners++;
-	while(gctx->running)
-		gthr_context_run_once(gctx);
+	while(gctx->running){
+		if(gthr_context_run_once(gctx))
+			sleep(1);
+		/* TODO ^^^^^^^^^ (important): implement this with a condition variable */
+	}
 	gctx->runners--;
 }
+
+void
+gthr_context_runners(struct gthr_context *gctx, unsigned n)
+{
+	if(n >= GTHR_THRD_CAP)
+		return;
+	gctx->thrds_len = n;
+	for(unsigned i = 0; i < n; i++)
+		pthread_create(&gctx->thrds[i], NULL, gthr_context_run, gctx);
+}
+
+void
+gthr_context_end_runners(struct gthr_context *gctx)
+{
+	gctx->running = 0;
+	for(unsigned i = 0; i < gctx->thrds_len; i++)
+		pthread_join(gctx->thrds[i], NULL);
+}
+
 
 //
 
@@ -154,7 +184,10 @@ void
 _gthr_wrap()
 {
 	ctx_switch(&_gthr->ctx, &_gthr->link);
+
 	_gthr->function(_gthr->args);
+
+	printf("%p in wrap %d\n", _gthr, _gthr->yield_status);
 	ctx_switch(&_gthr->ctx, &_gthr->link);
 	// unreachable
 }
@@ -179,12 +212,12 @@ gthr_create(void (*function)(void*), void *args)
 	void *stack_end = (void *)((size_t)(g->stack_data + g->stack_size - 1) & ~0xF);
 
 	_gthr = g;
-	if(!ctx_save(&g->link)){
+	if(!ctx_save(&_gthr->link)){
 		ctx_stack_to(stack_end);
 		_gthr_wrap();
 		// unreachable
 	}
-	_gthr = _prev;
+	//_gthr = _prev;
 
 	gthr_context_exqueue_send(_gthr_context, g);
 	return 1;

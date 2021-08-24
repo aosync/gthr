@@ -8,6 +8,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <pthread.h>
 
 enum gthr_yield_status {
 	GTHR_RETURN,
@@ -30,6 +31,7 @@ struct gthr{
 	short wake_errno;
 	
 	struct timespec wakeup_time;
+	_Atomic char runs;
 };
 
 struct gthr *gthr_make(struct gthr_context *, size_t);
@@ -38,6 +40,7 @@ void gthr_free(struct gthr *);
 void gthr_yield(void);
 
 #define GTHR_BIN_CAP 64
+#define GTHR_THRD_CAP 64
 
 struct gthr_context{
 	struct spin exqueue_lock;
@@ -56,12 +59,15 @@ struct gthr_context{
 	unsigned bin_len;
 	
 	/* [ ... probably threading stuff ] */
+	unsigned thrds_len;
+	pthread_t thrds[GTHR_THRD_CAP];
+	
 	_Atomic char running;
 	_Atomic unsigned runners;
 };
 
-extern _Thread_local struct gthr *_gthr;
-extern _Thread_local struct gthr_context *_gthr_context;
+extern _Thread_local volatile struct gthr *_gthr;
+extern _Thread_local volatile struct gthr_context *_gthr_context;
 
 
 void gthr_context_init(struct gthr_context *);
@@ -70,8 +76,10 @@ void gthr_context_finish(struct gthr_context *);
 struct gthr *gthr_context_exqueue_recv(struct gthr_context *);
 void gthr_context_exqueue_send(struct gthr_context *, struct gthr *);
 
-void gthr_context_run_once(struct gthr_context *);
+char gthr_context_run_once(struct gthr_context *);
 void gthr_context_run(struct gthr_context *);
+void gthr_context_runners(struct gthr_context *, unsigned);
+void gthr_context_end_runners(struct gthr_context *);
 
 // 
 

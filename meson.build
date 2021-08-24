@@ -18,7 +18,9 @@ if not spin_dep.found()
    spin_dep = spin_proj.get_variable('spin_dep')
 endif
 
-all_deps = [ctx_dep, vec_dep, spin_dep]
+thread_dep = dependency('threads')
+
+all_deps = [ctx_dep, vec_dep, spin_dep, thread_dep]
 
 gthr_inc = include_directories('.')
 gthr_lib = static_library('gthr', 'gthr.c', include_directories : gthr_inc, dependencies : all_deps)

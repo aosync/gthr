@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <errno.h>
 #include <string.h>
+#include <pthread.h>
 
 // experiments.
 /*
@@ -112,23 +113,48 @@ void gm(void *v) {
 
 #include <stdio.h>
 
+_Atomic int d = 0;
+_Atomic int b = 0;
+
 void
-hi(void*)
+hi(void *arg)
 {
-	printf("hi\n");
+	int *a = arg;
+loop:
+	d++;
+	
+	printf("gonna yield\n");
 	gthr_yield();
-	printf("%p %p\n", _gthr, _gthr_context);
+	b++;
+	if(d > 1000)
+		return;
+	//printf("returned from yield\n");
+	//printf("%p %p %d\n", _gthr, _gthr_context, pthread_self());
+	goto loop;
 }
 
 int main() {
 	struct gthr_context gctx;
 	gthr_context_init(&gctx);
 
-	printf("b\n");
-	gthr_create_on(&gctx, hi, NULL);
+	int i = 5;
+	gthr_create_on(&gctx, hi, &i);
+	int o = 10;
+	gthr_create_on(&gctx, hi, &o);
+	int y = 15;
+	gthr_create_on(&gctx, hi, &y);
+	int z = 20;
+	gthr_create_on(&gctx, hi, &z);
 
-	gthr_context_run_once(&gctx);
-	gthr_context_run_once(&gctx);
+	gthr_context_runners(&gctx, 1);
+
+	//gthr_context_run(&gctx);
+	while(1);
+	//while(1)
+	//	gthr_context_run_once(&gctx);
+	//gthr_context_run(&gctx);
+
+	gthr_context_end_runners(&gctx);
 	gthr_context_finish(&gctx);
 	return 0;
 }
