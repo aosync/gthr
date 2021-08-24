@@ -250,7 +250,7 @@ gthr_create(void (*function)(void*), void *args)
 		_gthr_wrap();
 		// unreachable
 	}
-	//_gthr = _prev;
+	_set_gthr(_prev);
 
 	gthr_context_exqueue_send(_gthr_context, g);
 	return 1;
