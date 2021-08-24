@@ -1,7 +1,40 @@
 #include "gthr.h"
 
-_Thread_local volatile struct gthr *_gthr = NULL;
-_Thread_local volatile struct gthr_context *_gthr_context = NULL;
+_Thread_local volatile struct gthr *_gthr_ = NULL;
+_Thread_local volatile struct gthr_context *_gthr_context_ = NULL;
+
+#if defined(__clang__)
+/* This is a workaround to force clang to treat thread local variables as volatile */
+__attribute__((noinline)) struct gthr *
+_get_gthr()
+{
+	return _gthr_;
+}
+__attribute__((noinline)) struct gthr_context *
+_get_gthr_context()
+{
+	return _gthr_context_;
+}
+
+__attribute__((noinline)) void
+_set_gthr(struct gthr* g)
+{
+	_gthr_ = g;
+}
+__attribute__((noinline)) void
+_set_gthr_context(struct gthr_context *gctx)
+{
+	_gthr_context_ = gctx;
+}
+
+#define _gthr (_get_gthr())
+#define _gthr_context (_get_gthr_context())
+#else
+#define _gthr (_gthr_)
+#define _gthr_context (_gthr_context_)
+#define _set_gthr(x) (_gthr_ = (x))
+#define _set_gthr_context(x) (_gthr_context_ = (x))
+#endif
 
 struct gthr *
 gthr_make(struct gthr_context *gctx, size_t stack_pages)
@@ -122,9 +155,9 @@ gthr_context_exqueue_send(struct gthr_context *gctx, struct gthr *g)
 char
 gthr_context_run_once(struct gthr_context *gctx)
 {
-	_gthr_context = gctx;
+	_set_gthr_context(gctx);
 
-	_gthr = gthr_context_exqueue_recv(gctx);
+	_set_gthr(gthr_context_exqueue_recv(gctx));
 	if(!_gthr)
 		return 1;
 	if(_gthr->runs){
@@ -142,8 +175,8 @@ gthr_context_run_once(struct gthr_context *gctx)
 	if(_gthr->yield_status == GTHR_RETURN)
 		gthr_recycle(_gthr);
 
-	_gthr = NULL;
-	_gthr_context = NULL;
+	_set_gthr(NULL);
+	_set_gthr_context(NULL);
 	return 0;
 }
 
@@ -211,7 +244,7 @@ gthr_create(void (*function)(void*), void *args)
 
 	void *stack_end = (void *)((size_t)(g->stack_data + g->stack_size - 1) & ~0xF);
 
-	_gthr = g;
+	_set_gthr(g);
 	if(!ctx_save(&_gthr->link)){
 		ctx_stack_to(stack_end);
 		_gthr_wrap();
@@ -228,9 +261,9 @@ gthr_create_on(struct gthr_context *gctx, void (*function)(void*), void *args)
 {
 	char rc;
 	struct gthr_context *_prev = _gthr_context;
-	_gthr_context = gctx;
+	_set_gthr_context(gctx);
 	rc = gthr_create(function, args);
-	_gthr_context = _prev;
+	_set_gthr_context(_prev);
 	return rc;
 }
 

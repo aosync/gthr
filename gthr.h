@@ -66,8 +66,8 @@ struct gthr_context{
 	_Atomic unsigned runners;
 };
 
-extern _Thread_local volatile struct gthr *_gthr;
-extern _Thread_local volatile struct gthr_context *_gthr_context;
+extern _Thread_local volatile struct gthr *_gthr_;
+extern _Thread_local volatile struct gthr_context *_gthr_context_;
 
 
 void gthr_context_init(struct gthr_context *);
