@@ -60,6 +60,7 @@ gthr_context_init(struct gthr_context *gctx)
 		.bin_lock = spin_new(NULL),
 
 		.running = 1,
+		.runners = 0,
 	};
 }
 
@@ -141,8 +142,10 @@ gthr_context_run_once(struct gthr_context *gctx)
 void
 gthr_context_run(struct gthr_context *gctx)
 {
+	gctx->runners++;
 	while(gctx->running)
 		gthr_context_run_once(gctx);
+	gctx->runners--;
 }
 
 //

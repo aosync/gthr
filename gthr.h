@@ -57,6 +57,7 @@ struct gthr_context{
 	
 	/* [ ... probably threading stuff ] */
 	_Atomic char running;
+	_Atomic unsigned runners;
 };
 
 extern _Thread_local struct gthr *_gthr;
