@@ -183,8 +183,8 @@ gthr_context_run(struct gthr_context *gctx)
 {
 	gctx->runners++;
 	while(gctx->running){
-		if(gthr_context_run_once(gctx))
-			sleep(1);
+		if(gthr_context_run_once(gctx));
+			//sleep(1);
 		/* TODO ^^^^^^^^^ (important): implement this with a condition variable */
 	}
 	gctx->runners--;
