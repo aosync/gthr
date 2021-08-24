@@ -70,7 +70,6 @@ gthr_free(struct gthr *g)
 void
 gthr_yield()
 {
-	gthr_context_exqueue_send(_gthr_context, _gthr);
 	_gthr->yield_status = GTHR_LAISSEZ;
 	ctx_switch(&_gthr->ctx, &_gthr->link);
 }
@@ -160,20 +159,19 @@ gthr_context_run_once(struct gthr_context *gctx)
 	_set_gthr(gthr_context_exqueue_recv(gctx));
 	if(!_gthr)
 		return 1;
-	if(_gthr->runs){
-		gthr_context_exqueue_send(gctx, _gthr);
-		return 2;
-	}
 
 	_gthr->yield_status = GTHR_RETURN;
-	_gthr->runs = 1;
 	ctx_switch(&_gthr->link, &_gthr->ctx);
-	_gthr->runs = 0;
 	_gthr->wake_errno = 0;
 
-	printf("%p in loop %d\n", _gthr, _gthr->yield_status);
-	if(_gthr->yield_status == GTHR_RETURN)
+	switch(_gthr->yield_status){
+	case GTHR_LAISSEZ:
+		gthr_context_exqueue_send(_gthr_context, _gthr);
+		break;
+	default:
 		gthr_recycle(_gthr);
+	}
+
 
 	_set_gthr(NULL);
 	_set_gthr_context(NULL);

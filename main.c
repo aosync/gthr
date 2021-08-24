@@ -123,10 +123,11 @@ hi(void *arg)
 loop:
 	d++;
 	
-	printf("gonna yield\n");
+	//printf("gonna yield\n");
 	gthr_yield();
 	b++;
-	if(d > 1000)
+	sleep(1);
+	if(d > 10)
 		return;
 	//printf("returned from yield\n");
 	//printf("%p %p %d\n", _gthr, _gthr_context, pthread_self());
@@ -146,7 +147,7 @@ int main() {
 	int z = 20;
 	gthr_create_on(&gctx, hi, &z);
 
-	gthr_context_runners(&gctx, 1);
+	gthr_context_runners(&gctx, 3);
 
 	//gthr_context_run(&gctx);
 	while(1);
