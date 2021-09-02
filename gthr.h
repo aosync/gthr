@@ -60,9 +60,12 @@ struct gthr_context{
 	/* [ ... probably threading stuff ] */
 	unsigned thrds_len;
 	pthread_t thrds[GTHR_THRD_CAP];
+
+	pthread_cond_t exqueue_new;
 	
 	_Atomic char running;
 	_Atomic unsigned runners;
+	_Atomic unsigned sema;
 };
 
 extern _Thread_local volatile struct gthr *_gthr_;

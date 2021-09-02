@@ -92,6 +92,8 @@ gthr_context_init(struct gthr_context *gctx)
 	pthread_mutex_init(&gctx->sleep_lock, NULL);
 	pthread_mutex_init(&gctx->plist_lock, NULL);
 	pthread_mutex_init(&gctx->bin_lock, NULL);
+
+	pthread_cond_init(&gctx->exqueue_new, NULL);
 }
 
 void
@@ -125,6 +127,8 @@ gthr_context_finish(struct gthr_context *gctx)
 	}
 	pthread_mutex_unlock(&gctx->bin_lock);
 	pthread_mutex_destroy(&gctx->bin_lock);
+
+	pthread_cond_destroy(&gctx->exqueue_new);
 }
 
 struct gthr *
@@ -158,6 +162,7 @@ gthr_context_exqueue_send(struct gthr_context *gctx, struct gthr *g)
 	}
 
 	pthread_mutex_unlock(&gctx->exqueue_lock);
+	pthread_cond_signal(&gctx->exqueue_new);
 }
 
 char
@@ -190,10 +195,15 @@ gthr_context_run_once(struct gthr_context *gctx)
 void
 gthr_context_run(struct gthr_context *gctx)
 {
+	pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+	
 	gctx->runners++;
 	while(gctx->running){
-		if(gthr_context_run_once(gctx));
-			//sleep(1);
+		if(gthr_context_run_once(gctx)){
+			pthread_mutex_lock(&mtx);
+			pthread_cond_wait(&gctx->exqueue_new, &mtx);
+			pthread_mutex_unlock(&mtx);
+		}
 		/* TODO ^^^^^^^^^ (important): implement this with a condition variable */
 	}
 	gctx->runners--;
@@ -213,6 +223,7 @@ void
 gthr_context_end_runners(struct gthr_context *gctx)
 {
 	gctx->running = 0;
+	pthread_cond_broadcast(&gctx->exqueue_new);
 	for(unsigned i = 0; i < gctx->thrds_len; i++)
 		pthread_join(gctx->thrds[i], NULL);
 }
@@ -260,6 +271,8 @@ gthr_create(void (*function)(void*), void *args)
 	}
 	_set_gthr(_prev);
 
+	_gthr_context->sema++;
+
 	gthr_context_exqueue_send(_gthr_context, g);
 	return 1;
 }
@@ -289,4 +302,6 @@ gthr_recycle(struct gthr *g)
 
 	if(!binned)
 		gthr_free(g);
+
+	_gthr_context->sema--;
 }

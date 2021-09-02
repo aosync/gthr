@@ -26,6 +26,7 @@ hi(void *arg)
 	printf("Arrived in gthr %d\n", *a);
 	
 	while(d < 10000000){
+		if(*a == 4 && d > 1000000) break;
 		d++;
 
 		for(int i = 0; i < 1000; i++);
@@ -56,9 +57,10 @@ int main(int argc, char **argv) {
 	if(procs > 1)
 		gthr_context_runners(&gctx, procs - 1);
 
-	while(!gthr_context_run_once(&gctx));
+	while(gctx.sema) gthr_context_run_once(&gctx);
 
 	gthr_context_end_runners(&gctx);
 	gthr_context_finish(&gctx);
+	printf("finished\n");
 	return 0;
 }
