@@ -3,7 +3,6 @@
 
 #include <vec.h>
 #include <ctx.h>
-#include <spin.h>
 
 #include <poll.h>
 #include <unistd.h>
@@ -47,14 +46,14 @@ struct gthr_context{
 	struct gthr  *exqueue_head;
 	struct gthr  *exqueue_tail;
 
-	struct spin sleep_lock;
+	pthread_mutex_t sleep_lock;
 	vec(struct gthr *) sleep;
 
-	struct spin plist_lock;
+	pthread_mutex_t plist_lock;
 	vec(struct pollfd) plist_pfd;
 	vec(struct gthr *) plist_gthr;
 
-	struct spin bin_lock;
+	pthread_mutex_t bin_lock;
 	struct gthr *bin[GTHR_BIN_CAP];
 	unsigned bin_len;
 	

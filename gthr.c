@@ -80,19 +80,18 @@ void
 gthr_context_init(struct gthr_context *gctx)
 {
 	*gctx = (struct gthr_context){
-		.sleep_lock = spin_new(NULL),
 		.sleep = vec_new(struct gthr *),
 
-		.plist_lock = spin_new(NULL),
 		.plist_pfd = vec_new(struct pollfd),
 		.plist_gthr = vec_new(struct gthr *),
-
-		.bin_lock = spin_new(NULL),
 
 		.running = 1,
 		.runners = 0,
 	};
 	pthread_mutex_init(&gctx->exqueue_lock, NULL);
+	pthread_mutex_init(&gctx->sleep_lock, NULL);
+	pthread_mutex_init(&gctx->plist_lock, NULL);
+	pthread_mutex_init(&gctx->bin_lock, NULL);
 }
 
 void
@@ -102,24 +101,30 @@ gthr_context_finish(struct gthr_context *gctx)
 	while(gctx->exqueue_head)
 		gthr_free(gthr_context_exqueue_recv(gctx));
 	pthread_mutex_destroy(&gctx->exqueue_lock);
-	spin(void *_, &gctx->sleep_lock){
-		vec_foreach(struct gthr *, it, gctx->sleep){
-			gthr_free(it);
-		}
-		vec_free(gctx->sleep);
+
+	pthread_mutex_lock(&gctx->sleep_lock);
+	vec_foreach(struct gthr *, it, gctx->sleep){
+		gthr_free(it);
 	}
-	spin(void *_, &gctx->plist_lock){
-		vec_free(gctx->plist_pfd);
-		vec_foreach(struct gthr *, it, gctx->plist_gthr){
-			gthr_free(it);
-		}
-		vec_free(gctx->plist_gthr);
+	vec_free(gctx->sleep);
+	pthread_mutex_unlock(&gctx->sleep_lock);
+	pthread_mutex_destroy(&gctx->sleep_lock);
+
+	pthread_mutex_lock(&gctx->plist_lock);
+	vec_free(gctx->plist_pfd);
+	vec_foreach(struct gthr *, it, gctx->plist_gthr){
+		gthr_free(it);
 	}
-	spin(void *_, &gctx->bin_lock){
-		for(unsigned i = 0; i < gctx->bin_len; i++){
-			gthr_free(gctx->bin[i]);
-		}
+	vec_free(gctx->plist_gthr);
+	pthread_mutex_unlock(&gctx->plist_lock);
+	pthread_mutex_destroy(&gctx->plist_lock);
+
+	pthread_mutex_lock(&gctx->bin_lock);
+	for(unsigned i = 0; i < gctx->bin_len; i++){
+		gthr_free(gctx->bin[i]);
 	}
+	pthread_mutex_unlock(&gctx->bin_lock);
+	pthread_mutex_destroy(&gctx->bin_lock);
 }
 
 struct gthr *
@@ -231,10 +236,12 @@ gthr_create(void (*function)(void*), void *args)
 {
 	struct gthr *_prev = _gthr;
 	struct gthr *g = NULL;
-	spin(void *_, &_gthr_context->bin_lock){
-		if(_gthr_context->bin_len > 0)
-			g = _gthr_context->bin[--_gthr_context->bin_len];
-	}
+
+	pthread_mutex_lock(&_gthr_context->bin_lock);
+	if(_gthr_context->bin_len > 0)
+		g = _gthr_context->bin[--_gthr_context->bin_len];
+	pthread_mutex_unlock(&_gthr_context->bin_lock);
+
 	if(g == NULL)
 		g = gthr_make(_gthr_context, 8);
 	if(g == NULL)
@@ -272,12 +279,14 @@ void
 gthr_recycle(struct gthr *g)
 {
 	char binned = 0;
-	spin(void *_, &_gthr_context->bin_lock){
-		if(_gthr_context->bin_len < GTHR_BIN_CAP){
-			_gthr_context->bin[_gthr_context->bin_len++] = g;
-			binned = 1;
-		}
+
+	pthread_mutex_lock(&_gthr_context->bin_lock);
+	if(_gthr_context->bin_len < GTHR_BIN_CAP){
+		_gthr_context->bin[_gthr_context->bin_len++] = g;
+		binned = 1;
 	}
+	pthread_mutex_unlock(&_gthr_context->bin_lock);
+
 	if(!binned)
 		gthr_free(g);
 }
