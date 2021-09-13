@@ -24,6 +24,8 @@ hi(void *arg)
 {
 	int *a = arg;
 	printf("Arrived in gthr %d\n", *a);
+	gthr_delay(1000);
+	printf("slept\n");
 	
 	while(d < 10000000){
 		if(*a == 4 && d > 1000000) break;
@@ -44,6 +46,8 @@ int main(int argc, char **argv) {
 	
 	struct gthr_context gctx;
 	gthr_context_init(&gctx);
+
+	gthr_create_on(&gctx, gthr0, NULL);
 
 	int i = 1;
 	gthr_create_on(&gctx, hi, &i);

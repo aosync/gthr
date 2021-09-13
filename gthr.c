@@ -74,6 +74,21 @@ gthr_yield()
 	ctx_switch(&_gthr->ctx, &_gthr->link);
 }
 
+void
+gthr_delay(long ms)
+{
+	clock_gettime(CLOCK_MONOTONIC, &_gthr->wakeup_time);
+	_gthr->wakeup_time.tv_sec += ms / 1000;
+	_gthr->wakeup_time.tv_nsec += (ms * 1000000) % 1000000000;
+	
+	pthread_mutex_lock(&_gthr_context->sleep_lock);
+	vec_push(_gthr_context->sleep, _gthr);
+	pthread_mutex_unlock(&_gthr_context->sleep_lock);
+
+	_gthr->yield_status = GTHR_NOTHING;
+	ctx_switch(&_gthr->ctx, &_gthr->link);
+}
+
 //
 
 void
@@ -181,6 +196,8 @@ gthr_context_run_once(struct gthr_context *gctx)
 	switch(_gthr->yield_status){
 	case GTHR_LAISSEZ:
 		gthr_context_exqueue_send(_gthr_context, _gthr);
+		break;
+	case GTHR_NOTHING:
 		break;
 	default:
 		gthr_recycle(_gthr);
@@ -304,4 +321,52 @@ gthr_recycle(struct gthr *g)
 		gthr_free(g);
 
 	_gthr_context->sema--;
+}
+
+int
+gthr0_sleeps()
+{
+	int ret = 1000;
+	pthread_mutex_lock(&_gthr_context->sleep_lock);
+	if(vec_len(_gthr_context->sleep) == 0){
+		ret = -1;
+		goto end;
+	}
+
+	struct timespec now, cur;
+	int ms, one = 0;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
+	for(int i = 0; i < vec_len(_gthr_context->sleep); i++){
+		cur = _gthr_context->sleep[i]->wakeup_time;
+		ms = (cur.tv_sec - now.tv_sec) * 1000 + (cur.tv_nsec - now.tv_nsec) / 1000000;
+
+		if(ms <= 0){
+			struct gthr *g = _gthr_context->sleep[i];
+			_gthr_context->sleep[i] = _gthr_context->sleep[vec_len(_gthr_context->sleep) - 1];
+
+			vec_pop(_gthr_context->sleep);
+			gthr_context_exqueue_send(_gthr_context, g);
+			i--;
+		}else if(ms <= ret){
+			one = 1;
+			ret = ms;
+		}
+	}
+
+	if(!one) ret = -1;
+end:
+	pthread_mutex_unlock(&_gthr_context->sleep_lock);
+	return ret;
+}
+
+void
+gthr0()
+{
+	while(_gthr_context->running){
+		int timeout = gthr0_sleeps();
+
+		gthr_yield();
+	}
 }

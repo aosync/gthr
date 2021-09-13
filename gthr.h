@@ -11,7 +11,8 @@
 
 enum gthr_yield_status {
 	GTHR_RETURN,
-	GTHR_LAISSEZ
+	GTHR_LAISSEZ,
+	GTHR_NOTHING
 };
 
 struct gthr{
@@ -37,6 +38,7 @@ struct gthr *gthr_make(struct gthr_context *, size_t);
 void gthr_free(struct gthr *);
 
 void gthr_yield(void);
+void gthr_delay(long);
 
 #define GTHR_BIN_CAP 64
 #define GTHR_THRD_CAP 64
@@ -82,6 +84,9 @@ char gthr_context_run_once(struct gthr_context *);
 void gthr_context_run(struct gthr_context *);
 void gthr_context_runners(struct gthr_context *, unsigned);
 void gthr_context_end_runners(struct gthr_context *);
+
+int gthr0_sleeps(void);
+void gthr0(void);
 
 // 
 
